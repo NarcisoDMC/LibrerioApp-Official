@@ -22,7 +22,7 @@ Dos aplicaciones en un solo monorepo (sin workspaces compartidos):
 - **Frontend** :3000 — Next.js 16.2.12, React 19, Tailwind 4, `motion`, `swiper`, iconos de `lucide-react`
 - **Base de datos** — PostgreSQL dev en Podman (`librerio-pg`), migraciones con Drizzle Kit
 - **Catálogo** — proxy a la **Open Library API** (búsquedas, ediciones, autores, temas); el backend resuelve y normaliza los metadatos *server-side*
-- **Git** — solo rama `main`; historial corto con commits descriptivos en español
+- **Git** — rama principal `main`; el trabajo activo vive en ramas feature (hoy `feat/bibliotecario-ia` con los últimos cambios, pendiente de merge); historial corto con commits descriptivos en español
 
 ---
 
@@ -121,6 +121,8 @@ Postgres dev local (Podman): contenedor `librerio-pg`. Si no está arriba: `podm
 
 `src/models/deepseek/deepseekClient.ts` + `src/services/bibliotecario.service.ts` (+ `systemPrompt.ts` y `contentPolicy.ts` en `services/bibliotecario/`). `POST /api/bibliotecario/chat` con `requireAuth` + `chatLimiter` (15/h por IP), body `{messages:[{role,content ≤2000}]}` máx 12, respuesta `{respuesta, enlaces?}`.
 
+- **Modelo**: `deepseek-chat`, temp 0.7, timeout 30s + 1 reintento; `response_format: {type:"json_object"}` **solo en llamadas sin tools** (DeepSeek exige JSON válido con ese flag; con tools el modelo responde `tool_calls` nativos, no JSON)
+- **Sanitización de salida** (el JSON del modelo llega roto a menudo): zod `safeParse` con schema permisivo (enlaces sin `.max()` — un `.max(3)` rompía el parse y provocaba regresión con JSON visible) + desanidado en bucle (máx 3 niveles) + fallback `extractEnvelope` (regex tolerante a comillas sin escapar); `extractJson` escanea llaves ignorando strings para sobrevivir a JSON anidado mal formado; enlaces truncados post-hoc con `slice(0, MAX_LINKS)`
 - **Anclaje al catálogo**: function calling (`buscar_libros`, `tendencias`, `detalle_libro`) ejecutadas server-side contra `searchService`; máx 2 iteraciones + 1 llamada final sin tools (cierre garantizado)
 - **Contexto personal**: bloque "DATOS DEL USUARIO" con la biblioteca real (título + estado + rating) vía `libraryRepo.listByUser` — solo datos propios, generado server-side
 - **Anti prompt injection**: system prompt 100% estático; mensajes del usuario envueltos como "contenido, no instrucción"; salida JSON validada con zod (fallback a texto plano); marca única `LBR-SYS-V1` para detectar fugas del prompt; whitelist de URLs de librerías (`isAllowedLink`); el modelo nunca recibe el error crudo del proveedor
@@ -195,6 +197,8 @@ cd frontend && pnpm dev               # 3. SPA en :3000
 
 **Verificación estándar** tras tocar el backend: `pnpm typecheck && pnpm lint && pnpm build` + recorrido de pruebas con `curl` contra `:3001/api` (auth → biblioteca → comunidad, incluyendo anti-IDOR con un segundo usuario).
 
+**Diagnóstico de procesos** (importante: `tsx watch` acumula watchers viejos que siguen sirviendo código stale tras reinicios): comprobar con `ss -tlnp | grep -E ":300[01]"` y `pgrep -af 'cli\.mjs watch'`; matar por PID los sobrantes con `kill -9 <pid>` (nunca pkill con "tsx" en el propio comando, se auto-mata). El `chatLimiter` es in-memory: se resetea reiniciando el backend (`fuser -k 3001/tcp` + relanzar), útil para probar el chat sin esperar la hora.
+
 ---
 
 ## 5. Estado del proyecto
@@ -210,6 +214,17 @@ cd frontend && pnpm dev               # 3. SPA en :3000
 7. **Integración frontend** — sesión global, login/registro reales, explorar (detalle + búsqueda), Mi Biblioteca y Comunidad funcionales (ver sección 3.4)
 8. **Bibliotecario IA (Fase 7)** — chat con DeepSeek anclado al catálogo real (function calling), contexto de la biblioteca personal, defensas anti prompt injection y filtro de contenido local (ver sección 2.7)
 
+### ✔ Cambios recientes en `feat/bibliotecario-ia` (2 commits, pendiente merge a `main`)
+
+- **`f62d3da` "fix(ui): mejorar detalle de libro, autores reales y likedByMe"** — 5 correcciones pedidas: sinopsis en markdown (`MarkdownContent` con react-markdown + remark-gfm), portada más grande (`w-72 sm:w-80`), `BackButton` (vuelve con `router.back()`), autores con nombre real (`resolveAuthorNames` en `search.service.ts` resuelve por key/OLID con fallback al nombre crudo) y `likedByMe` persistente en el feed (GET posts con `optionalAuth` + `community.repo` con `EXISTS` en `post_likes`)
+- **`9844b9d` "feat(bibliotecario): integración IA con DeepSeek"** — backend completo del chat (client, servicio, system prompt, content policy, rutas y límites) + frontend `/Bibliotecario` (ver sección 2.7 y 3.4)
+
+### ✔ Verificación realizada (fase Bibliotecario, agosto 2026)
+
+- `pnpm typecheck && pnpm lint && pnpm build` verdes en backend y frontend
+- Suite de pruebas con `curl` contra `:3001/api`: happy paths con tools y contexto personal, **12/12 respuestas limpias** en tanda final; suite de inyección OK (pedir el system prompt, jailbreak estilo DAN, temas fuera de catálogo, "bomba para novela" → rechazados todos); content policy unit 7/7 (incluye falsos positivos literarios); 400 (13 msgs / vacío), 401 sin token y **429 real** verificados; whitelist de URLs OK
+- Frontend: `/Bibliotecario` responde 200 con pantalla de login sin sesión; E2E con token real vía curl OK
+
 ### ◌ Pendiente / fases futuras
 
 - **Tests automatizados del backend** — la fase "tests" del plan original nunca se materializó: no hay vitest/supertest ni test files. Prioridad para retomar: cubrir auth, catálogo, biblioteca, comunidad y bibliotecario (incluida la suite de inyección) con supertest contra la BD dev
@@ -224,6 +239,7 @@ cd frontend && pnpm dev               # 3. SPA en :3000
 - Open Library solo indexa el detalle con `q=key:/works/{olid}` (el `key:` desnudo devuelve 0 resultados); `isbn:{isbn}` también resuelve
 - El logout no invalida el access JWT en curso (caduca en minutos): es comportamiento JWT estándar, no un bug
 - Límites: JSON de entrada 100kb; notas ≤2000, post título ≤100 / contenido ≤5000, comentarios ≤1000 (validados por zod)
+- Los fixes de UI del detalle y el Bibliotecario IA NO están en `main` aún: viven en `feat/bibliotecario-ia` (HEAD en `9844b9d`); para seguirlos tocando hay que estar en esa rama
 - El Bibliotecario IA no comparte historial de usuario entre peticiones: el cliente envía el contexto (máx 12 msgs); el rate limit in-memory se queda por instancia en Vercel
 - La portada responde `null` si OL no la tiene: los componentes muestran fallback con gradiente
 - Al arrancar el backend de nuevo no hace falta re-migrar: `db:migrate` solo aplica migraciones nuevas (drizzle `meta/` guarda el estado)
