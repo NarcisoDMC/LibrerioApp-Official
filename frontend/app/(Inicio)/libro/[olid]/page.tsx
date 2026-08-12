@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, BookOpen, CalendarDays, Star } from "lucide-react";
+import { BookOpen, CalendarDays, Star } from "lucide-react";
 import { apiGet } from "@/lib/api-client";
 import type { BookDetail } from "@/lib/types";
 import AddToLibraryButton from "@/app/ui/Components/AddToLibraryButton";
+import BackButton from "@/app/ui/Components/BackButton";
+import MarkdownContent from "@/app/ui/Components/MarkdownContent";
 
 export const dynamic = "force-dynamic";
 
@@ -25,20 +27,16 @@ export default async function LibroPage({
         <div className="min-h-screen bg-[#fdfdfd] pb-20 font-sans">
             <div className="w-full max-w-6xl mx-auto mt-6 px-4 sm:px-6 lg:px-8 box-border">
                 {/* ── Volver ─────────────────────────────────────── */}
-                <Link
-                    href="/"
-                    className="inline-flex items-center gap-2 text-[#8553d1] text-sm font-medium hover:text-[#4a348c] transition-colors mb-6"
-                >
-                    <ArrowLeft size={16} />
-                    Volver
-                </Link>
+                <div className="mb-6">
+                    <BackButton />
+                </div>
 
                 {/* ── Ficha del libro ────────────────────────────── */}
                 <div className="flex flex-col md:flex-row gap-8">
                     {/* Portada */}
                     <div className="flex-shrink-0 flex justify-center">
                         {book.cover ? (
-                            <div className="w-56 sm:w-64 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl border border-purple-100 bg-white">
+                            <div className="w-72 sm:w-80 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl border border-purple-100 bg-white">
                                 {/* eslint-disable-next-line @next/next/no-img-element -- imágenes remotas de la API */}
                                 <img
                                     src={book.cover}
@@ -48,7 +46,7 @@ export default async function LibroPage({
                                 />
                             </div>
                         ) : (
-                            <div className="w-56 sm:w-64 aspect-[2/3] rounded-2xl bg-gradient-to-br from-[#3d5bcf] via-[#8553d1] to-[#c765dc] shadow-2xl flex items-center justify-center">
+                            <div className="w-72 sm:w-80 aspect-[2/3] rounded-2xl bg-gradient-to-br from-[#3d5bcf] via-[#8553d1] to-[#c765dc] shadow-2xl flex items-center justify-center">
                                 <BookOpen className="w-20 h-20 text-white/90" />
                             </div>
                         )}
@@ -84,9 +82,7 @@ export default async function LibroPage({
                                 <h2 className="text-sm font-bold text-[#4a348c] uppercase tracking-wide mb-2">
                                     Sinopsis
                                 </h2>
-                                <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line">
-                                    {book.description}
-                                </p>
+                                <MarkdownContent content={book.description} />
                             </div>
                         )}
 

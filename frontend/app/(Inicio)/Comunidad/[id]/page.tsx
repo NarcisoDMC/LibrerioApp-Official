@@ -127,7 +127,11 @@ export default function PostDetailPage() {
                     </p>
 
                     <div className="flex items-center gap-4 pt-3 border-t border-gray-100">
-                        <PostLikeButton postId={post.id} initialCount={post.likeCount} />
+                        <PostLikeButton
+                            postId={post.id}
+                            initialCount={post.likeCount}
+                            initialLiked={post.likedByMe}
+                        />
                         <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-500">
                             <MessageCircle size={14} />
                             {post.commentCount} comentario{post.commentCount === 1 ? "" : "s"}

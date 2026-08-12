@@ -45,6 +45,17 @@ function cleanBooks(docs: OLSearchResponse["docs"]): Book[] {
     return docs.map(mapSearchDoc).filter((b): b is Book => b !== null);
 }
 
+// Los trabajos y ediciones de OL solo traen CLAVES de autor (OL26320A);
+// resolvemos los nombres reales consultando cada perfil (paralelo, con
+// fallback a la clave para no perder información si alguno falla)
+async function resolveAuthorNames(keys: string[]): Promise<string[]> {
+    const results = await Promise.allSettled(keys.map((key) => olFetch<OLAuthorJson>(`/authors/${key}.json`)));
+    return results.map((r, i) => {
+        const fallback = keys[i] ?? "Autor desconocido";
+        return r.status === "fulfilled" ? (r.value.name ?? fallback) : fallback;
+    });
+}
+
 export const searchService = {
     async search(params: SearchParams): Promise<SearchResult> {
         const qs = new URLSearchParams();
@@ -87,12 +98,16 @@ export const searchService = {
 
     async byOlid(olid: string): Promise<BookDetail> {
         const raw = await olFetch<OLWorkJson>(`/works/${olid}.json`);
-        return mapWorkDetail(raw);
+        const detail = mapWorkDetail(raw);
+        const authorNames = await resolveAuthorNames(detail.authors);
+        return { ...detail, authors: authorNames, author: authorNames[0] ?? "Autor desconocido" };
     },
 
     async byIsbn(isbn: string): Promise<BookDetail> {
         const raw = await olFetch<OLEditionJson>(`/isbn/${isbn}.json`);
-        return mapEditionDetail(raw);
+        const detail = mapEditionDetail(raw);
+        const authorNames = await resolveAuthorNames(detail.authors);
+        return { ...detail, authors: authorNames, author: authorNames[0] ?? "Autor desconocido" };
     },
 
     async authorProfile(olid: string): Promise<Author> {

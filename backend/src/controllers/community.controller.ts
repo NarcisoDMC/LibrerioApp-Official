@@ -45,12 +45,12 @@ function requireUserId(req: Request): string {
 export const communityController = {
     listPosts(req: Request, res: Response, next: NextFunction): void {
         const { page, limit, bookOlid } = getValid<z.infer<typeof listPostsQuerySchema>>(res, "validQuery");
-        void handle(() => communityService.listPosts(page, limit, bookOlid), res, next);
+        void handle(() => communityService.listPosts(page, limit, bookOlid, req.user?.id), res, next);
     },
 
     getPost(req: Request, res: Response, next: NextFunction): void {
         const { id } = getValid<z.infer<typeof communityParamsSchema>>(res, "validParams");
-        void handle(() => communityService.getPost(id), res, next);
+        void handle(() => communityService.getPost(id, req.user?.id), res, next);
     },
 
     createPost(req: Request, res: Response, next: NextFunction): void {

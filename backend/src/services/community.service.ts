@@ -12,7 +12,12 @@ export interface CreateCommentInput {
     content: string;
 }
 
-function postView(row: Awaited<ReturnType<typeof communityRepo.listPosts>>[number], likeCount: number, commentCount: number) {
+function postView(
+    row: Awaited<ReturnType<typeof communityRepo.listPosts>>[number],
+    likeCount: number,
+    commentCount: number,
+    likedByMe = false,
+) {
     return {
         id: row.post.id,
         bookOlid: row.post.bookOlid,
@@ -21,6 +26,7 @@ function postView(row: Awaited<ReturnType<typeof communityRepo.listPosts>>[numbe
         author: { id: row.post.userId, name: row.authorName },
         likeCount,
         commentCount,
+        likedByMe,
         createdAt: row.post.createdAt,
         updatedAt: row.post.updatedAt,
     };
@@ -43,38 +49,44 @@ export interface PostListResult {
 }
 
 export const communityService = {
-    async listPosts(page: number, limit: number, bookOlid?: string): Promise<PostListResult> {
+    async listPosts(page: number, limit: number, bookOlid?: string, userId?: string): Promise<PostListResult> {
         const [total, base] = await Promise.all([
             communityRepo.countPosts(bookOlid),
             communityRepo.listPosts(bookOlid, limit, (page - 1) * limit),
         ]);
 
-        const [likes, comments] = await Promise.all([
-            communityRepo.likeCounts(base.map((r) => r.post.id)),
-            communityRepo.commentCounts(base.map((r) => r.post.id)),
+        const ids = base.map((r) => r.post.id);
+
+        const [likes, comments, likedByMe] = await Promise.all([
+            communityRepo.likeCounts(ids),
+            communityRepo.commentCounts(ids),
+            userId ? communityRepo.likedPostIds(ids, userId) : Promise.resolve(new Set<string>()),
         ]);
 
         return {
             page,
             limit,
             total,
-            data: base.map((row) => postView(row, likes.get(row.post.id) ?? 0, comments.get(row.post.id) ?? 0)),
+            data: base.map((row) =>
+                postView(row, likes.get(row.post.id) ?? 0, comments.get(row.post.id) ?? 0, likedByMe.has(row.post.id)),
+            ),
         };
     },
 
-    async getPost(id: string) {
+    async getPost(id: string, userId?: string) {
         const row = await communityRepo.findPostById(id);
         if (!row) {
             throw new ApiError(404, "Post no encontrado");
         }
 
-        const [likes, comments] = await Promise.all([
+        const [likes, comments, likedByMe] = await Promise.all([
             communityRepo.likeCounts([id]),
             communityRepo.listComments(id),
+            userId ? communityRepo.likedPostIds([id], userId) : Promise.resolve(new Set<string>()),
         ]);
 
         return {
-            ...postView(row, likes.get(id) ?? 0, comments.length),
+            ...postView(row, likes.get(id) ?? 0, comments.length, likedByMe.has(id)),
             comments: comments.map(commentView),
         };
     },

@@ -85,6 +85,7 @@ export interface PostView {
     author: CommunityAuthor;
     likeCount: number;
     commentCount: number;
+    likedByMe: boolean;
     createdAt: string;
     updatedAt: string;
 }

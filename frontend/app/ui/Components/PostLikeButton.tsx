@@ -9,14 +9,16 @@ import { useAuth } from "@/lib/auth-context";
 export default function PostLikeButton({
     postId,
     initialCount,
+    initialLiked = false,
 }: {
     postId: string;
     initialCount: number;
+    initialLiked?: boolean;
 }) {
     const router = useRouter();
     const { user } = useAuth();
 
-    const [liked, setLiked] = useState(false);
+    const [liked, setLiked] = useState(initialLiked);
     const [count, setCount] = useState(initialCount);
     const [loading, setLoading] = useState(false);
 
