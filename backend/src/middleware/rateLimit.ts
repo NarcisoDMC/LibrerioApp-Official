@@ -26,3 +26,11 @@ export const authLimiter = jsonLimiter(
     10,
     "Demasiados intentos, espera 15 minutos",
 );
+
+// Bibliotecario IA: cada llamada consume cupo de DeepSeek (con coste),
+// 15 consultas por hora y por IP.
+export const chatLimiter = jsonLimiter(
+    60 * 60_000,
+    15,
+    "Has llegado al límite de consultas al Bibliotecario IA, espera una hora",
+);

@@ -28,3 +28,18 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction): v
         next(new ApiError(401, "Sesión inválida o expirada"));
     }
 }
+
+// Parecido a requireAuth pero nunca falla: rutas públicas que enriquecen su
+// respuesta cuando hay sesión (p. ej. likedByMe en el feed de comunidad)
+export function optionalAuth(req: Request, _res: Response, next: NextFunction): void {
+    const header = req.headers.authorization;
+    if (header?.startsWith("Bearer ")) {
+        try {
+            const payload = verifyAccessToken(header.slice("Bearer ".length));
+            req.user = { id: payload.sub };
+        } catch {
+            // token inválido/caducado: se trata como anónimo
+        }
+    }
+    next();
+}

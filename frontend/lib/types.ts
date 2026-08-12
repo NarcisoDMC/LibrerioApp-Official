@@ -85,6 +85,7 @@ export interface PostView {
     author: CommunityAuthor;
     likeCount: number;
     commentCount: number;
+    likedByMe: boolean;
     createdAt: string;
     updatedAt: string;
 }
@@ -105,4 +106,21 @@ export interface CommentView {
 
 export interface PostDetail extends PostView {
     comments: CommentView[];
+}
+
+// ── Bibliotecario IA ────────────────────────────────────────────────────────
+
+export interface ChatMessage {
+    role: "user" | "assistant";
+    content: string;
+}
+
+export interface ChatLink {
+    titulo: string;
+    url: string;
+}
+
+export interface ChatResponse {
+    respuesta: string;
+    enlaces?: ChatLink[];
 }

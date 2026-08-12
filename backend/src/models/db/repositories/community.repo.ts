@@ -78,6 +78,16 @@ export const communityRepo = {
         return new Map(rows.map((r) => [r.postId, r.n]));
     },
 
+    // Posts a los que un usuario concreto les dio like (para likedByMe)
+    async likedPostIds(postIds: string[], userId: string): Promise<Set<string>> {
+        if (postIds.length === 0) return new Set();
+        const rows = await db
+            .select({ postId: postLikes.postId })
+            .from(postLikes)
+            .where(and(inArray(postLikes.postId, postIds), eq(postLikes.userId, userId)));
+        return new Set(rows.map((r) => r.postId));
+    },
+
     async findPostById(id: string) {
         const rows = await db
             .select({ post: posts, authorName: users.name })

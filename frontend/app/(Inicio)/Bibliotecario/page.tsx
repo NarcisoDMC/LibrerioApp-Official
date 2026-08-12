@@ -1,9 +1,13 @@
 'use client'
 
 import { motion } from "motion/react";
-import { Bot, Send, Sparkles, BookOpen, Compass } from "lucide-react";
+import { Bot, Sparkles, BookOpen, Compass, LogIn } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+import BibliotecarioChat from "@/app/ui/Components/BibliotecarioChat";
 
 export default function Bibliotecario() {
+    const { user } = useAuth();
+
     return (
         <div className="min-h-screen bg-[#fdfdfd] pb-16 font-sans">
             {/* ── Banner Hero ──────────────────────────────────── */}
@@ -111,38 +115,29 @@ export default function Bibliotecario() {
                             </div>
                         </div>
 
-                        {/* Mensajes — actualmente placeholder estático */}
-                        <div className="flex-1 p-4 sm:p-6 overflow-y-auto bg-[#faf8fc]/50 flex items-center justify-center">
-                            <div className="text-center text-gray-400">
-                                <Bot className="w-12 h-12 mx-auto mb-3 text-purple-300" />
-                                <p className="text-sm font-medium">Conectando con el asistente...</p>
-                                <p className="text-xs mt-1">Próximamente podrás chatear con la IA aquí.</p>
-                            </div>
-                        </div>
-
-                        {/* Input — deshabilitado hasta conectar la IA */}
-                        <div className="p-4 bg-white border-t border-purple-100">
-                            <div className="flex items-center gap-2 bg-purple-50/60 p-1.5 rounded-full border border-purple-200/80 opacity-50">
-                                <input
-                                    type="text"
-                                    placeholder="Escribe tu duda o consulta de libros..."
-                                    disabled
-                                    className="flex-1 bg-transparent px-4 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none border-none font-sans"
-                                />
-
-                                <button
-                                    disabled
-                                    className="
-                                        w-10 h-10 rounded-full
-                                        bg-gradient-to-r from-[#3d5bcf] via-[#8553d1] to-[#c765dc]
-                                        text-white flex items-center justify-center
-                                        shadow-md opacity-40 border-none cursor-not-allowed
-                                    "
+                        {user ? (
+                            <BibliotecarioChat />
+                        ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8 text-center">
+                                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#3d5bcf] to-[#c765dc] flex items-center justify-center text-white shadow-md">
+                                    <LogIn className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-semibold text-gray-700 mb-1">
+                                        Inicia sesión para chatear con el bibliotecario
+                                    </p>
+                                    <p className="text-xs text-gray-400 max-w-sm">
+                                        El asistente conoce tu biblioteca para recomendarte según lo que ya has leído.
+                                    </p>
+                                </div>
+                                <a
+                                    href="/Login"
+                                    className="px-6 py-2.5 rounded-full text-white font-semibold text-sm bg-gradient-to-r from-[#3d5bcf] via-[#8553d1] to-[#c765dc] hover:opacity-90 transition-all"
                                 >
-                                    <Send className="w-4 h-4" />
-                                </button>
+                                    Iniciar sesión
+                                </a>
                             </div>
-                        </div>
+                        )}
 
                     </div>
                 </div>

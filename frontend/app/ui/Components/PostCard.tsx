@@ -51,7 +51,11 @@ export default function PostCard({ post }: { post: PostView }) {
 
             {/* ── Acciones ───────────────────────────────────────── */}
             <div className="flex items-center gap-4 mt-4 pt-3 border-t border-gray-100">
-                <PostLikeButton postId={post.id} initialCount={post.likeCount} />
+                <PostLikeButton
+                    postId={post.id}
+                    initialCount={post.likeCount}
+                    initialLiked={post.likedByMe}
+                />
                 <Link
                     href={`/Comunidad/${post.id}`}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 text-xs font-semibold text-gray-500 hover:border-purple-200 hover:text-[#8553d1] transition-all"
