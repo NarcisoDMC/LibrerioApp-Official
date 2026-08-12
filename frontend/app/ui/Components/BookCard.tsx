@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { BookOpen, Star } from "lucide-react";
 
 export interface Book {
@@ -48,7 +49,10 @@ export default function BookCard({ book, loading }: { book: Book | null; loading
 
     /* ── MODO NORMAL ────────────────────────────────────────── */
     return (
-        <div className="group relative flex flex-col h-full w-full rounded-2xl border border-purple-300/40 bg-white p-3.5 sm:p-4 shadow-sm transition-all duration-300 ease-out hover:-translate-y-2.5 hover:shadow-xl hover:shadow-purple-500/15 hover:border-purple-500 cursor-pointer overflow-hidden">
+        <Link
+            href={`/libro/${book.id}`}
+            className="group relative flex flex-col h-full w-full rounded-2xl border border-purple-300/40 bg-white p-3.5 sm:p-4 shadow-sm transition-all duration-300 ease-out hover:-translate-y-2.5 hover:shadow-xl hover:shadow-purple-500/15 hover:border-purple-500 cursor-pointer overflow-hidden"
+        >
             {/* Overlay de gradiente al hacer hover */}
             <div className="absolute inset-0 bg-gradient-to-br from-white via-purple-50/50 to-purple-100/40 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
@@ -93,6 +97,6 @@ export default function BookCard({ book, loading }: { book: Book | null; loading
                     </div>
                 </div>
             </div>
-        </div>
+        </Link>
     );
 }

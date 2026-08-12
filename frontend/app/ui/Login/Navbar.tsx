@@ -1,12 +1,8 @@
 import Link from "next/link"
 import Image from "next/image"
-import clsx from "clsx"
-import { usePathname } from "next/navigation"
 import NavLinks from "./Nav-links"
 
 export default function Navbar() {
-    const pathname = usePathname();
-
     return (
         /* ── Encabezado principal (shell del navbar) ───────── */
         <header className="w-full font-sans relative z-50">

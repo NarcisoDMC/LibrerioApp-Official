@@ -1,21 +1,48 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import AuthSelector from "@/app/ui/Login/AuthSelector"
 import Navbar from "@/app/ui/Login/Navbar";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
 import { playfairdisplay } from "@/app/fonts";
-import { Star, BookOpen, User, Mail, Lock } from "lucide-react";
+import { Star, BookOpen, User, Mail, Lock, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import TypeWriter from "@/app/ui/Components/TypeWriter";
 import { STARS } from "@/app/(Auth)/stars";
+import { useAuth } from "@/lib/auth-context";
 
 export default function RegistroPage() {
     const router = useRouter();
+    const { user, register } = useAuth();
+
+    const [name, setName] = useState("");
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [error, setError] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (user) router.replace("/");
+    }, [user, router]);
 
     const handleNavigateToLogin = (e: React.MouseEvent) => {
         e.preventDefault();
         router.push("/Login");
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError(null);
+        setLoading(true);
+        try {
+            await register({ name, email, password });
+            router.push("/");
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Error inesperado al registrarse");
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -95,7 +122,7 @@ export default function RegistroPage() {
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ duration: 0.5, delay: 0.2 }}
                         >
-                            <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+                            <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-2xl overflow-hidden">
                                 {/* Cabecera del form */}
                                 <div className="px-7 pt-6 pb-4">
                                     <h2 className="text-center text-violet-700 font-semibold text-lg mb-4">
@@ -105,7 +132,9 @@ export default function RegistroPage() {
                                     {/* Botón Google */}
                                     <button
                                         type="button"
-                                        className="w-full flex items-center justify-center gap-3 border border-gray-200 rounded-xl py-2.5 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors duration-200 mb-4 shadow-sm"
+                                        disabled
+                                        title="Próximamente"
+                                        className="w-full flex items-center justify-center gap-3 border border-gray-200 rounded-xl py-2.5 px-4 text-sm font-medium text-gray-400 bg-gray-50 cursor-not-allowed mb-4 shadow-sm"
                                     >
                                         <span>Registrarse con Google</span>
                                         {/* SVG Google colorido */}
@@ -137,6 +166,12 @@ export default function RegistroPage() {
                                             <input
                                                 type="text"
                                                 id="registro-username"
+                                                required
+                                                minLength={2}
+                                                maxLength={50}
+                                                value={name}
+                                                onChange={(e) => setName(e.target.value)}
+                                                autoComplete="name"
                                                 className="w-full bg-fuchsia-200/60 rounded-full py-2.5 pl-4 pr-10 text-sm text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-violet-400 focus:bg-white transition-all duration-300"
                                             />
                                             <User
@@ -158,6 +193,10 @@ export default function RegistroPage() {
                                             <input
                                                 type="email"
                                                 id="registro-email"
+                                                required
+                                                value={email}
+                                                onChange={(e) => setEmail(e.target.value)}
+                                                autoComplete="email"
                                                 className="w-full bg-fuchsia-200/60 rounded-full py-2.5 pl-4 pr-10 text-sm text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-violet-400 focus:bg-white transition-all duration-300"
                                             />
                                             <Mail
@@ -179,6 +218,11 @@ export default function RegistroPage() {
                                             <input
                                                 type="password"
                                                 id="registro-password"
+                                                required
+                                                minLength={8}
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                autoComplete="new-password"
                                                 className="w-full bg-fuchsia-200/60 rounded-full py-2.5 pl-4 pr-10 text-sm text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-violet-400 focus:bg-white transition-all duration-300"
                                             />
                                             <Lock
@@ -188,23 +232,37 @@ export default function RegistroPage() {
                                         </div>
                                     </div>
 
+                                    {/* Error del API */}
+                                    {error && (
+                                        <div className="mb-4 px-4 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-medium">
+                                            {error}
+                                        </div>
+                                    )}
+
                                     {/* Botón Submit */}
                                     <motion.button
                                         type="submit"
-                                        whileHover={{ scale: 1.02 }}
-                                        whileTap={{ scale: 0.97 }}
-                                        className="w-full py-2.5 rounded-full text-white font-semibold text-sm"
+                                        disabled={loading}
+                                        whileHover={{ scale: loading ? 1 : 1.02 }}
+                                        whileTap={{ scale: loading ? 1 : 0.97 }}
+                                        className="w-full py-2.5 rounded-full text-white font-semibold text-sm disabled:opacity-60 flex items-center justify-center gap-2"
                                         style={{
                                             background: "linear-gradient(90deg, #3157cd 0%, #7c3aed 50%, #af58d8 100%)",
                                         }}
                                     >
-                                        Iniciar Sesión
+                                        {loading ? (
+                                            <>
+                                                <Loader2 size={16} className="animate-spin" />
+                                                Creando cuenta…
+                                            </>
+                                        ) : (
+                                            "Crear Cuenta"
+                                        )}
                                     </motion.button>
                                 </div>
 
                                 {/* Footer del card */}
                                 <div className="bg-gray-50 py-3 text-center border-t border-gray-100">
-                                    <p className="text-gray-400 text-xs">Secured by Clerk</p>
                                     <p className="text-gray-500 text-xs mt-1">
                                         ¿Ya tienes cuenta?{" "}
                                         <Link
@@ -216,7 +274,7 @@ export default function RegistroPage() {
                                         </Link>
                                     </p>
                                 </div>
-                            </div>
+                            </form>
                         </motion.div>
 
                         {/* ── Libro decorativo (derecha) ────────────────── */}

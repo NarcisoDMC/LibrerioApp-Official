@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import clsx from "clsx"
 import { motion } from "motion/react"
-import { Book, BotMessageSquare, Icon, Library, UsersRound } from "lucide-react"
+import { Book, BotMessageSquare, Library, UsersRound } from "lucide-react"
 
 /* Links de navegación */
 const NavLinks = [

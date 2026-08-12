@@ -1,9 +1,8 @@
 'use client'
 
-import { cache, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import BookCarousel from "./BookCarrusel";
 import type { Book } from "./BookCard";
-import { Key } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
