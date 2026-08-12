@@ -83,6 +83,7 @@ src/
 | POST | `/api/community/posts` `{title,content,bookOlid?}` | Bearer | 400 validaciones |
 | POST | `/api/community/posts/:id/comments` `{content}` | Bearer | 404 post inexistente |
 | POST | `/api/community/posts/:id/like` | Bearer | toggle → `{liked}` |
+| POST | `/api/bibliotecario/chat` `{messages:[{role,content}]}` | Bearer | IA (DeepSeek); 12 msgs × 2000 chars; 15/h por IP; 503 sin key |
 
 Formato de error: `{ "error": "mensaje", "details": [...]? }` con el código HTTP correspondiente.
 
@@ -115,6 +116,17 @@ Postgres dev local (Podman): contenedor `librerio-pg`. Si no está arriba: `podm
 ### 2.6 Variables de entorno (`backend/.env`, ver `.env.example`)
 
 `PORT`, `CORS_ORIGIN`, `OL_CONTACT_EMAIL` (requisito de Open Library para subir su rate limit), `DATABASE_URL` (Postgres), `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` (≥32 chars, `openssl rand -hex 32`), `DEEPSEEK_API_KEY` (opcional, para el Bibliotecario IA). **Nunca comitear `.env`.**
+
+### 2.7 Bibliotecario IA (DeepSeek)
+
+`src/models/deepseek/deepseekClient.ts` + `src/services/bibliotecario.service.ts` (+ `systemPrompt.ts` y `contentPolicy.ts` en `services/bibliotecario/`). `POST /api/bibliotecario/chat` con `requireAuth` + `chatLimiter` (15/h por IP), body `{messages:[{role,content ≤2000}]}` máx 12, respuesta `{respuesta, enlaces?}`.
+
+- **Anclaje al catálogo**: function calling (`buscar_libros`, `tendencias`, `detalle_libro`) ejecutadas server-side contra `searchService`; máx 2 iteraciones + 1 llamada final sin tools (cierre garantizado)
+- **Contexto personal**: bloque "DATOS DEL USUARIO" con la biblioteca real (título + estado + rating) vía `libraryRepo.listByUser` — solo datos propios, generado server-side
+- **Anti prompt injection**: system prompt 100% estático; mensajes del usuario envueltos como "contenido, no instrucción"; salida JSON validada con zod (fallback a texto plano); marca única `LBR-SYS-V1` para detectar fugas del prompt; whitelist de URLs de librerías (`isAllowedLink`); el modelo nunca recibe el error crudo del proveedor
+- **Filtro de contenido** (`contentPolicy.ts`): capa determinista local por categorías (sexo explícito, violencia gráfica, fabricación peligrosa, fraude) — patrones fuertes (1 hit) + términos acumulables (umbral); DeepSeek tiene menos restricciones morales que modelos norteamericanos, por eso no se confía solo en el system prompt
+- **Errores**: `503` sin `DEEPSEEK_API_KEY`, `502` proveedor caído/respuesta vacía (con `console.warn` de diagnóstico), `429` cupo del proveedor
+- **Frontend**: `BibliotecarioChat.tsx` (historial en `sessionStorage` `librerio.bibliotecario.session`, respuestas con `MarkdownContent`, enlaces como chips, sugerencias iniciales, requiere sesión → pantalla de login)
 
 ---
 
@@ -150,12 +162,13 @@ app/
 ├── (Inicio)/Mi-Biblioteca/       → CRUD completo (filtros, modal añadir, edición inline, borrado)
 ├── (Inicio)/Comunidad/           → feed de posts + modal crear
 ├── (Inicio)/Comunidad/[id]/      → detalle: comentarios + like + formulario
-├── (Inicio)/Bibliotecario/       → UI de chat estática (pendiente de la IA)
+├── (Inicio)/Bibliotecario/       → chat real con el Bibliotecario IA (requiere sesión)
 └── ui/Components/                → BookCard (clickeable), BookCarrusel, BookSections,
                                      Navbar, Nav-links, NavBottom, TypeWriter,
                                      AddToLibraryButton, LibraryAddModal, PostCard,
                                      PostLikeButton, CreatePostModal, StarRating,
-                                     MarkdownContent (sinopsis markdown), BackButton
+                                     MarkdownContent (sinopsis markdown), BackButton,
+                                     BibliotecarioChat (chat IA con sessionStorage)
 ```
 
 `NEXT_PUBLIC_API_URL` (`.env.local`, no comiteado): apunta al backend (`http://localhost:3001`).
@@ -186,7 +199,7 @@ cd frontend && pnpm dev               # 3. SPA en :3000
 
 ## 5. Estado del proyecto
 
-### ✔ Implementado (plan original, fases 1-6 + integración del frontend)
+### ✔ Implementado (plan original, fases 1-7 + integración del frontend)
 
 1. **Bootstrapping Express/Drizzle** — servidor, env zod, health, logging
 2. **Catálogo Open Library** — búsqueda, categorías, detalle, autores, temas, trending; mappers que limpian docs falsos y protegen el cupo con rate limit
@@ -195,11 +208,11 @@ cd frontend && pnpm dev               # 3. SPA en :3000
 5. **Biblioteca** — CRUD privado por usuario (estado, rating 1-5, notas), metadatos server-side, anti-IDOR, 409 en duplicados
 6. **Comunidad** — posts (públicos), comentarios y likes (toggle) con auth; conteos agregados sin N+1
 7. **Integración frontend** — sesión global, login/registro reales, explorar (detalle + búsqueda), Mi Biblioteca y Comunidad funcionales (ver sección 3.4)
+8. **Bibliotecario IA (Fase 7)** — chat con DeepSeek anclado al catálogo real (function calling), contexto de la biblioteca personal, defensas anti prompt injection y filtro de contenido local (ver sección 2.7)
 
 ### ◌ Pendiente / fases futuras
 
-- **Tests automatizados del backend** — la fase "tests" del plan original nunca se materializó: no hay vitest/supertest ni test files. Prioridad para retomar: cubrir auth, catálogo, biblioteca y comunidad con supertest contra la BD dev
-- **Bibliotecario IA (Fase 7)** — endpoint de chat con DeepSeek (`DEEPSEEK_API_KEY` ya prevista en env): recomendaciones personalizadas, consultas, dónde comprar/préstamo; conectar la UI de `/Bibliotecario` (input deshabilitado hoy)
+- **Tests automatizados del backend** — la fase "tests" del plan original nunca se materializó: no hay vitest/supertest ni test files. Prioridad para retomar: cubrir auth, catálogo, biblioteca, comunidad y bibliotecario (incluida la suite de inyección) con supertest contra la BD dev
 - **Login con Google** — botones deshabilitados en Login/Registro ("Próximamente")
 - **Deploy** — `vercel.json` + `api/index.ts` ya existen; falta Postgres gestionado (Neon), env vars en Vercel y validación del rate limit in-memory en funciones serverless (no comparte estado entre instancias)
 - **README del backend / documentación de API** — no existe
@@ -211,5 +224,6 @@ cd frontend && pnpm dev               # 3. SPA en :3000
 - Open Library solo indexa el detalle con `q=key:/works/{olid}` (el `key:` desnudo devuelve 0 resultados); `isbn:{isbn}` también resuelve
 - El logout no invalida el access JWT en curso (caduca en minutos): es comportamiento JWT estándar, no un bug
 - Límites: JSON de entrada 100kb; notas ≤2000, post título ≤100 / contenido ≤5000, comentarios ≤1000 (validados por zod)
+- El Bibliotecario IA no comparte historial de usuario entre peticiones: el cliente envía el contexto (máx 12 msgs); el rate limit in-memory se queda por instancia en Vercel
 - La portada responde `null` si OL no la tiene: los componentes muestran fallback con gradiente
 - Al arrancar el backend de nuevo no hace falta re-migrar: `db:migrate` solo aplica migraciones nuevas (drizzle `meta/` guarda el estado)

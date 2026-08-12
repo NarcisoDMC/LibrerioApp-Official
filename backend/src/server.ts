@@ -10,6 +10,7 @@ import { catalogRouter } from "./routes/catalog.routes.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { communityRouter } from "./routes/community.routes.js";
 import { libraryRouter } from "./routes/library.routes.js";
+import { bibliotecarioRouter } from "./routes/bibliotecario.routes.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 
 export function createApp(): Express {
@@ -27,6 +28,7 @@ export function createApp(): Express {
     app.use("/api/auth", authRouter);
     app.use("/api/library", libraryRouter);
     app.use("/api/community", communityRouter);
+    app.use("/api/bibliotecario", bibliotecarioRouter);
 
     // ── Manejo de errores (SIEMPRE al final) ──────────────────────
     app.use(notFound);
