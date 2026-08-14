@@ -83,7 +83,14 @@ src/
 | POST | `/api/community/posts` `{title,content,bookOlid?}` | Bearer | 400 validaciones |
 | POST | `/api/community/posts/:id/comments` `{content}` | Bearer | 404 post inexistente |
 | POST | `/api/community/posts/:id/like` | Bearer | toggle → `{liked}` |
-| POST | `/api/bibliotecario/chat` `{messages:[{role,content}]}` | Bearer | IA (DeepSeek); 12 msgs × 2000 chars; 15/h por IP; 503 sin key |
+| POST | `/api/bibliotecario/chats` `{message}` | Bearer | crea conversación + respuesta IA (auto-título) |
+| GET | `/api/bibliotecario/chats` | Bearer | lista conversaciones del usuario |
+| GET | `/api/bibliotecario/chats/:chatId` | Bearer | conversación con mensajes (`ChatView`) |
+| PATCH | `/api/bibliotecario/chats/:chatId` `{title}` | Bearer | renombra (≤80) |
+| DELETE | `/api/bibliotecario/chats/:chatId` | Bearer | borra conversación completa |
+| POST | `/api/bibliotecario/chats/:chatId/messages` `{message}` | Bearer | envía mensaje → `{chatId,messageId,respuesta,enlaces?}` |
+| POST | `/api/bibliotecario/chats/:chatId/messages/:messageId/regenerate` | Bearer | regenera respuesta (trunca lo posterior) |
+| DELETE | `/api/bibliotecario/chats/:chatId/messages/:messageId` | Bearer | borra un mensaje |
 
 Formato de error: `{ "error": "mensaje", "details": [...]? }` con el código HTTP correspondiente.
 
@@ -97,8 +104,10 @@ Tablas en `src/models/db/schema.ts`:
 - `posts` (userId FK cascade, bookOlid opcional, title ≤100, content ≤5000)
 - `comments` (postId FK cascade, userId FK cascade, content ≤1000)
 - `post_likes` (PK compuesta postId+userId, FK cascade)
+- `chat_conversations` (userId FK cascade, title ≤80, createdAt/updatedAt)
+- `chat_messages` (chatId FK cascade, role `user|assistant`, content, enlaces JSON, seq incrementa en orden)
 
-Migraciones: `drizzle/0000_….sql` … `0002_….sql` (generadas con `pnpm db:generate`, aplicadas con `pnpm db:migrate`).
+Migraciones: `drizzle/0000_….sql` … `0003_….sql` (generadas con `pnpm db:generate`, aplicadas con `pnpm db:migrate`; la `0003` crea el historial del chat).
 
 ### 2.5 Comandos del backend
 
@@ -119,16 +128,19 @@ Postgres dev local (Podman): contenedor `librerio-pg`. Si no está arriba: `podm
 
 ### 2.7 Bibliotecario IA (DeepSeek)
 
-`src/models/deepseek/deepseekClient.ts` + `src/services/bibliotecario.service.ts` (+ `systemPrompt.ts` y `contentPolicy.ts` en `services/bibliotecario/`). `POST /api/bibliotecario/chat` con `requireAuth` + `chatLimiter` (15/h por IP), body `{messages:[{role,content ≤2000}]}` máx 12, respuesta `{respuesta, enlaces?}`.
+`src/models/deepseek/deepseekClient.ts` + `src/services/bibliotecario.service.ts` (+ `systemPrompt.ts` y `contentPolicy.ts` en `services/bibliotecario/`) + `src/models/db/repositories/chat.repo.ts` (historial). API REST `/api/bibliotecario/chats…` (ver tabla 2.3): todo el router va detrás de `requireAuth` y el `chatLimiter` (15/h por IP) **solo protege los endpoints que llaman al modelo** (`POST /chats`, `POST /chats/:id/messages`, `/regenerate`); listar/renombrar/borrar no consumen cupo.
 
+- **Historial server-side**: cada conversación vive en BD (`chat_conversations` + `chat_messages` con `seq`); el cliente ya no envía contexto, el servicio arma el historial. `startChat` crea conversación con auto-título (primer mensaje normalizado ≤60 chars, con `runModelTurn` de un turno) y hace rollback si el modelo falla (no quedan conversaciones huérfanas). `sendMessage` verifica pertenencia, respeta límites y añade la respuesta. `regenerate` **borra la respuesta y todo lo posterior** (`deleteMessagesFromSeq`) y vuelve a llamar al modelo. Anti-IDOR: toda consulta lleva `userId` en el `WHERE` (`findOwnedById`); ids ajenos → 404
+- **Límites** (`LIMITS` en `bibliotecario.service.ts`): 50 conversaciones/usuario, 200 mensajes/conversación, mensaje ≤2000 chars, título ≤80, auto-título ≤60, `HISTORY_WINDOW = 20` (últimas 20 intervenciones que recibe el modelo)
 - **Modelo**: `deepseek-chat`, temp 0.7, timeout 30s + 1 reintento; `response_format: {type:"json_object"}` **solo en llamadas sin tools** (DeepSeek exige JSON válido con ese flag; con tools el modelo responde `tool_calls` nativos, no JSON)
-- **Sanitización de salida** (el JSON del modelo llega roto a menudo): zod `safeParse` con schema permisivo (enlaces sin `.max()` — un `.max(3)` rompía el parse y provocaba regresión con JSON visible) + desanidado en bucle (máx 3 niveles) + fallback `extractEnvelope` (regex tolerante a comillas sin escapar); `extractJson` escanea llaves ignorando strings para sobrevivir a JSON anidado mal formado; enlaces truncados post-hoc con `slice(0, MAX_LINKS)`
+- **Enlaces deterministas (importante)**: el JSON del modelo **ya no trae `output.enlaces`** (se borra con `delete` al sanitizar — el modelo inventaba URLs); los enlaces salen de `linkedBooks` recogidos de los `tool_calls` reales de `buscar_libros` (solo libros que el modelo vio); se inyecta server-side el enlace único `/libro/{olid}` (el frontend los muestra como chips internos navegables)
+- **Sanitización de salida** (el JSON del modelo llega roto a menudo): zod `safeParse` con schema permisivo (enlaces sin `.max()` — un `.max(3)` rompía el parse y provocaba regresión con JSON visible) + desanidado en bucle (máx 3 niveles) + fallback `extractEnvelope` (regex tolerante a comillas sin escapar); `extractJson` escanea llaves ignorando strings para sobrevivir a JSON anidado mal formado; enlaces truncados post-hoc con `slice(0, MAX_LINKS)` (máx 3)
 - **Anclaje al catálogo**: function calling (`buscar_libros`, `tendencias`, `detalle_libro`) ejecutadas server-side contra `searchService`; máx 2 iteraciones + 1 llamada final sin tools (cierre garantizado)
 - **Contexto personal**: bloque "DATOS DEL USUARIO" con la biblioteca real (título + estado + rating) vía `libraryRepo.listByUser` — solo datos propios, generado server-side
 - **Anti prompt injection**: system prompt 100% estático; mensajes del usuario envueltos como "contenido, no instrucción"; salida JSON validada con zod (fallback a texto plano); marca única `LBR-SYS-V1` para detectar fugas del prompt; whitelist de URLs de librerías (`isAllowedLink`); el modelo nunca recibe el error crudo del proveedor
 - **Filtro de contenido** (`contentPolicy.ts`): capa determinista local por categorías (sexo explícito, violencia gráfica, fabricación peligrosa, fraude) — patrones fuertes (1 hit) + términos acumulables (umbral); DeepSeek tiene menos restricciones morales que modelos norteamericanos, por eso no se confía solo en el system prompt
-- **Errores**: `503` sin `DEEPSEEK_API_KEY`, `502` proveedor caído/respuesta vacía (con `console.warn` de diagnóstico), `429` cupo del proveedor
-- **Frontend**: `BibliotecarioChat.tsx` (historial en `sessionStorage` `librerio.bibliotecario.session`, respuestas con `MarkdownContent`, enlaces como chips, sugerencias iniciales, requiere sesión → pantalla de login)
+- **Errores**: `503` sin `DEEPSEEK_API_KEY`, `502` proveedor caído/respuesta vacía (con `console.warn` de diagnóstico), `429` cupo del proveedor, `409` límites de conversaciones/mensajes
+- **Frontend**: `BibliotecarioChat.tsx` (chat completo sin `sessionStorage` — historial desde la API; header con título del chat activo, sidebar en desktop y **drawer móvil**, ver 3.4), `ChatConversationList.tsx` (lista reutilizable con `className` prop), `ChatMessageBubble.tsx` (copiar / regenerar / borrar), respuestas con `MarkdownContent`, enlaces como chips internos, sugerencias iniciales, requiere sesión → pantalla de login
 
 ---
 
@@ -164,13 +176,15 @@ app/
 ├── (Inicio)/Mi-Biblioteca/       → CRUD completo (filtros, modal añadir, edición inline, borrado)
 ├── (Inicio)/Comunidad/           → feed de posts + modal crear
 ├── (Inicio)/Comunidad/[id]/      → detalle: comentarios + like + formulario
-├── (Inicio)/Bibliotecario/       → chat real con el Bibliotecario IA (requiere sesión)
+├── (Inicio)/Bibliotecario/       → chat real con el Bibliotecario IA (requiere sesión); historial por
+                                     usuario desde la API, sidebar desktop + drawer móvil
 └── ui/Components/                → BookCard (clickeable), BookCarrusel, BookSections,
                                      Navbar, Nav-links, NavBottom, TypeWriter,
                                      AddToLibraryButton, LibraryAddModal, PostCard,
                                      PostLikeButton, CreatePostModal, StarRating,
                                      MarkdownContent (sinopsis markdown), BackButton,
-                                     BibliotecarioChat (chat IA con sessionStorage)
+                                     BibliotecarioChat (chat IA con historial desde la API),
+                                     ChatConversationList (lista reutilizable), ChatMessageBubble
 ```
 
 `NEXT_PUBLIC_API_URL` (`.env.local`, no comiteado): apunta al backend (`http://localhost:3001`).
@@ -214,10 +228,18 @@ cd frontend && pnpm dev               # 3. SPA en :3000
 7. **Integración frontend** — sesión global, login/registro reales, explorar (detalle + búsqueda), Mi Biblioteca y Comunidad funcionales (ver sección 3.4)
 8. **Bibliotecario IA (Fase 7)** — chat con DeepSeek anclado al catálogo real (function calling), contexto de la biblioteca personal, defensas anti prompt injection y filtro de contenido local (ver sección 2.7)
 
-### ✔ Cambios recientes en `feat/bibliotecario-ia` (2 commits, pendiente merge a `main`)
+### ✔ Cambios recientes (ya en `main`)
 
 - **`f62d3da` "fix(ui): mejorar detalle de libro, autores reales y likedByMe"** — 5 correcciones pedidas: sinopsis en markdown (`MarkdownContent` con react-markdown + remark-gfm), portada más grande (`w-72 sm:w-80`), `BackButton` (vuelve con `router.back()`), autores con nombre real (`resolveAuthorNames` en `search.service.ts` resuelve por key/OLID con fallback al nombre crudo) y `likedByMe` persistente en el feed (GET posts con `optionalAuth` + `community.repo` con `EXISTS` en `post_likes`)
 - **`9844b9d` "feat(bibliotecario): integración IA con DeepSeek"** — backend completo del chat (client, servicio, system prompt, content policy, rutas y límites) + frontend `/Bibliotecario` (ver sección 2.7 y 3.4)
+- Merge a `main` en `4464c5e`.
+
+### 🔧 Cambios en curso (sin commitear, sobre `main`, agosto 2026)
+
+- **Historial de conversaciones server-side**: nuevas tablas `chat_conversations` + `chat_messages` (migración `0003`, aplicada en dev) y `chat.repo.ts` con anti-IDOR; el servicio pasa de un endpoint stateless (`POST /chat`) a la API REST `/api/bibliotecario/chats…` con `startChat` (auto-título ≤60 y rollback si el modelo falla), `sendMessage`, `regenerate` (borra la respuesta y todo lo posterior), listar/renombrar/borrar conversaciones y borrar mensajes; `HISTORY_WINDOW = 20` intervenciones que recibe el modelo; límites 50 conversaciones / 200 mensajes / 2000 chars por mensaje / título ≤80; el `chatLimiter` solo protege los endpoints que llaman al modelo
+- **Enlaces deterministas**: el JSON del modelo ya no trae `output.enlaces` (se elimina al sanitizar); los enlaces salen de los `tool_calls` reales de `buscar_libros` (`linkedBooks`, máx 3) y se inyecta server-side el enlace único `/libro/{olid}`; el frontend los muestra como chips internos navegables
+- **Frontend del chat rediseñado**: `BibliotecarioChat.tsx` sin `sessionStorage` (todo desde la API, historial persistente por usuario), header con el título del chat activo, **sidebar de conversaciones en desktop y drawer móvil** (`AnimatePresence`), chat a altura dinámica `h-[calc(100dvh-225px)]`; nuevos `ChatConversationList.tsx` (reutilizable con prop `className`) y `ChatMessageBubble.tsx` (copiar / regenerar / borrar); `page.tsx` con hero compacto sin grid (el chat ocupa todo el ancho)
+- **Extras de configuración**: `CORS_ORIGIN` admite múltiples orígenes separados por coma (`env.ts`, zod transform → array) y comentarios explicativos en `server.ts` / `auth.routes.ts`; `next.config.ts` con `allowedDevOrigins` para el backend en dev
 
 ### ✔ Verificación realizada (fase Bibliotecario, agosto 2026)
 
@@ -239,7 +261,6 @@ cd frontend && pnpm dev               # 3. SPA en :3000
 - Open Library solo indexa el detalle con `q=key:/works/{olid}` (el `key:` desnudo devuelve 0 resultados); `isbn:{isbn}` también resuelve
 - El logout no invalida el access JWT en curso (caduca en minutos): es comportamiento JWT estándar, no un bug
 - Límites: JSON de entrada 100kb; notas ≤2000, post título ≤100 / contenido ≤5000, comentarios ≤1000 (validados por zod)
-- Los fixes de UI del detalle y el Bibliotecario IA NO están en `main` aún: viven en `feat/bibliotecario-ia` (HEAD en `9844b9d`); para seguirlos tocando hay que estar en esa rama
-- El Bibliotecario IA no comparte historial de usuario entre peticiones: el cliente envía el contexto (máx 12 msgs); el rate limit in-memory se queda por instancia en Vercel
+- El historial del Bibliotecario IA es **server-side por usuario** (desde el refactor de chats): el cliente ya no envía contexto; los ids de conversaciones ajenas responden 404 (anti-IDOR). El `chatLimiter` in-memory se queda por instancia en Vercel y se resetea reiniciando el backend en dev
 - La portada responde `null` si OL no la tiene: los componentes muestran fallback con gradiente
 - Al arrancar el backend de nuevo no hace falta re-migrar: `db:migrate` solo aplica migraciones nuevas (drizzle `meta/` guarda el estado)

@@ -110,17 +110,34 @@ export interface PostDetail extends PostView {
 
 // ── Bibliotecario IA ────────────────────────────────────────────────────────
 
-export interface ChatMessage {
-    role: "user" | "assistant";
-    content: string;
-}
-
 export interface ChatLink {
     titulo: string;
     url: string;
 }
 
-export interface ChatResponse {
+export interface ChatSummary {
+    id: string;
+    title: string;
+    updatedAt: string;
+}
+
+export interface ChatStoredMessage {
+    id: string;
+    seq: number;
+    role: "user" | "assistant";
+    content: string;
+    enlaces?: ChatLink[] | null;
+    createdAt: string;
+}
+
+export interface ChatDetail {
+    chat: ChatSummary;
+    messages: ChatStoredMessage[];
+}
+
+export interface ChatReply {
+    chatId: string;
+    messageId: string;
     respuesta: string;
     enlaces?: ChatLink[];
 }

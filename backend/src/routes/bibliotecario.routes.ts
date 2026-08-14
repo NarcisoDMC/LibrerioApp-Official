@@ -1,17 +1,60 @@
 import { Router } from "express";
-import { bibliotecarioController, chatBodySchema } from "../controllers/bibliotecario.controller.js";
+import {
+    bibliotecarioController,
+    chatCreateSchema,
+    chatIdParamsSchema,
+    chatMessageParamsSchema,
+    chatRenameBodySchema,
+} from "../controllers/bibliotecario.controller.js";
 import { requireAuth } from "../middleware/auth.js";
 import { chatLimiter } from "../middleware/rateLimit.js";
-import { validateBody } from "../middleware/validate.js";
+import { validateBody, validateParams } from "../middleware/validate.js";
 
 export const bibliotecarioRouter = Router();
 
-// Chat privado y con cupo: autenticado (personalización + antiabuso) y
-// limitado por IP+usuario para proteger el presupuesto del proveedor IA
+// Todo el chat es privado: el usuario sale del token, nunca del body
+bibliotecarioRouter.use(requireAuth);
+
+// El chatLimiter (cupo de DeepSeek) solo protege lo que consume el modelo:
+// listar, renombrar o borrar historial no llama al proveedor
 bibliotecarioRouter.post(
-    "/chat",
+    "/chats",
     chatLimiter,
-    requireAuth,
-    validateBody(chatBodySchema),
-    bibliotecarioController.chat,
+    validateBody(chatCreateSchema),
+    bibliotecarioController.startChat,
+);
+bibliotecarioRouter.get("/chats", bibliotecarioController.listChats);
+bibliotecarioRouter.get(
+    "/chats/:chatId",
+    validateParams(chatIdParamsSchema),
+    bibliotecarioController.getChat,
+);
+bibliotecarioRouter.patch(
+    "/chats/:chatId",
+    validateParams(chatIdParamsSchema),
+    validateBody(chatRenameBodySchema),
+    bibliotecarioController.renameChat,
+);
+bibliotecarioRouter.delete(
+    "/chats/:chatId",
+    validateParams(chatIdParamsSchema),
+    bibliotecarioController.deleteChat,
+);
+bibliotecarioRouter.post(
+    "/chats/:chatId/messages",
+    chatLimiter,
+    validateParams(chatIdParamsSchema),
+    validateBody(chatCreateSchema),
+    bibliotecarioController.sendMessage,
+);
+bibliotecarioRouter.post(
+    "/chats/:chatId/messages/:messageId/regenerate",
+    chatLimiter,
+    validateParams(chatMessageParamsSchema),
+    bibliotecarioController.regenerate,
+);
+bibliotecarioRouter.delete(
+    "/chats/:chatId/messages/:messageId",
+    validateParams(chatMessageParamsSchema),
+    bibliotecarioController.deleteMessage,
 );

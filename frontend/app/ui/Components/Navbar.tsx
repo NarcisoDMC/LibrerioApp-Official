@@ -49,19 +49,19 @@ export default function Navbar() {
                         />
                     </Link>
 
-                    {/* ── Barra de búsqueda con icono y botón AI ───── */}
+                    {/* ── Barra de búsqueda con icono */}
                     <div className="
-                flex flex-1 max-w-[42rem] mx-4
-                relative items-center gap-4
-                max-md:mx-0 max-md:max-w-none max-md:gap-3
-                max-[560px]:mx-0 max-[560px]:gap-0
-                ">
+                        flex flex-1 max-w-[42rem] mx-4
+                        relative items-center gap-4
+                        max-md:mx-0 max-md:max-w-none max-md:gap-3
+                        max-[560px]:mx-0 max-[560px]:gap-0
+                    ">
                         {/* Icono de búsqueda (decorativo) */}
                         <div className="
-                        absolute left-4 text-[#8553d1]
-                        flex items-center pointer-events-none
-                        max-[560px]:absolute max-[560px]:
-                    ">
+                            absolute left-4 text-[#8553d1]
+                            flex items-center pointer-events-none
+                            max-[560px]:absolute max-[560px]:
+                        ">
                             <Search size={20} />
                         </div>
 

@@ -17,13 +17,14 @@ export function createApp(): Express {
     const app = express();
 
     // ── Seguridad transversal ─────────────────────────────────────
-    app.use(helmet());
-    app.use(cors({ origin: env.CORS_ORIGIN }));
-    app.use(express.json({ limit: "100kb" }));
-    app.use(requestLogger);
+    app.use(helmet()); // cabeceras de seguridad
+    app.use(cors({ origin: env.CORS_ORIGIN })); //Quien puede hacer peticiones al backend (front)
+    app.use(express.json({ limit: "100kb" })); //Parsea el body a JSON
+    app.use(requestLogger); //registra cada peticion recibida
 
     // ── Rutas ─────────────────────────────────────────────────────
-    app.use("/api", healthRouter);
+    // Trazamos los controladores de rutas principales de la aplicacion
+    app.use("/api", healthRouter); //
     app.use("/api", catalogRouter);
     app.use("/api/auth", authRouter);
     app.use("/api/library", libraryRouter);

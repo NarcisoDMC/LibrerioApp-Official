@@ -1,5 +1,5 @@
-// ── System prompt del Bibliotecario IA ─────────────────────────────────────
-// 100% estático: el texto del usuario NUNCA se concatena aquí, viaja solo
+// -- System prompt del Bibliotecario IA ----------------------
+// 100% estatico: el texto del usuario NUNCA se concatena aquí, viaja solo
 // como mensajes separados. Contiene la marca única LBR-SYS-V1 para detectar
 // fugas del prompt en la salida del modelo.
 

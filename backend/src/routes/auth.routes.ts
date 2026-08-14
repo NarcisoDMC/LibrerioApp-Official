@@ -9,7 +9,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { authLimiter } from "../middleware/rateLimit.js";
 import { validateBody } from "../middleware/validate.js";
 
-export const authRouter = Router();
+export const authRouter = Router(); //Exporta las rutas del controlador
 
 // authLimiter solo en credenciales: combate fuerza bruta sin castigar refresh/logout
 authRouter.post(
@@ -18,6 +18,9 @@ authRouter.post(
     validateBody(registerBodySchema),
     authController.register,
 );
+
+//Permite hacer peticiones post 
+
 authRouter.post("/login", authLimiter, validateBody(loginBodySchema), authController.login);
 authRouter.post("/refresh", validateBody(refreshBodySchema), authController.refresh);
 authRouter.post("/logout", validateBody(refreshBodySchema), authController.logout);

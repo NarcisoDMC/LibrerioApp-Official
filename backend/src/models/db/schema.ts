@@ -1,4 +1,4 @@
-import { integer, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { integer, jsonb, pgEnum, pgTable, primaryKey, serial, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
     id: uuid("id").defaultRandom().primaryKey(),
@@ -82,4 +82,36 @@ export const postLikes = pgTable(
         createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     },
     (table) => [primaryKey({ columns: [table.postId, table.userId] })],
+);
+
+export const chatRoleEnum = pgEnum("chat_role", ["user", "assistant"]);
+
+export const chatConversations = pgTable("chat_conversations", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// seq serial garantiza orden estable incluso con createdAt coicidentes
+// (es la referencia que usa "regenerar" para truncar mensajes posteriores)
+export const chatMessages = pgTable(
+    "chat_messages",
+    {
+        id: uuid("id").defaultRandom().primaryKey(),
+        conversationId: uuid("conversation_id")
+            .notNull()
+            .references(() => chatConversations.id, { onDelete: "cascade" }),
+        seq: serial("seq").notNull(),
+        role: chatRoleEnum("role").notNull(),
+        content: text("content").notNull(),
+        enlaces: jsonb("enlaces").$type<{ titulo: string; url: string }[] | null>(),
+        createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    },
+    (table) => [
+        uniqueIndex("chat_messages_conversation_seq_unique").on(table.conversationId, table.seq),
+    ],
 );
