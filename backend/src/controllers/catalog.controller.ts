@@ -4,7 +4,7 @@ import { getValid } from "../middleware/validate.js";
 import { searchService, type SearchParams } from "../services/search.service.js";
 
 export const searchQuerySchema = z.object({
-    q: z.string().trim().max(200).optional(),
+    q: z.string().trim().min(3).max(200).optional(),
     author: z.string().trim().max(100).optional(),
     title: z.string().trim().max(200).optional(),
     subject: z.string().trim().max(100).optional(),

@@ -9,7 +9,7 @@ export default function NavBottom() {
                 rounded-tl-[20px] rounded-tr-[20px]
                 overflow-hidden">
 
-                <NavLinks layoutId="activeTabBackgroundMobile" />
+                <NavLinks />
             </div>
         </>
     );

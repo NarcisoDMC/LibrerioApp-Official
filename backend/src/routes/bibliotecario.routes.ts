@@ -53,6 +53,29 @@ bibliotecarioRouter.post(
     validateParams(chatMessageParamsSchema),
     bibliotecarioController.regenerate,
 );
+
+// ── Streaming SSE (las respuestas llegan por chunks) ────────────────────────
+// Mismos schemas zod y mismo chatLimiter; los endpoints JSON de arriba se
+// conservan como fallback mientras migra el frontend
+bibliotecarioRouter.post(
+    "/chats/stream",
+    chatLimiter,
+    validateBody(chatCreateSchema),
+    bibliotecarioController.startChatStream,
+);
+bibliotecarioRouter.post(
+    "/chats/:chatId/messages/stream",
+    chatLimiter,
+    validateParams(chatIdParamsSchema),
+    validateBody(chatCreateSchema),
+    bibliotecarioController.sendMessageStream,
+);
+bibliotecarioRouter.post(
+    "/chats/:chatId/messages/:messageId/regenerate/stream",
+    chatLimiter,
+    validateParams(chatMessageParamsSchema),
+    bibliotecarioController.regenerateStream,
+);
 bibliotecarioRouter.delete(
     "/chats/:chatId/messages/:messageId",
     validateParams(chatMessageParamsSchema),

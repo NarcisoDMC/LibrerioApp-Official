@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { BookOpen, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { BookOpen, Loader2, Pencil, Plus, Trash2, X, LogIn } from "lucide-react";
 import { motion } from "motion/react";
 import { apiDelete, apiGet, apiPatch } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
@@ -28,7 +27,6 @@ function statusLabel(status: ReadingStatus): string {
 }
 
 export default function MiBiblioteca() {
-    const router = useRouter();
     const { user, initializing } = useAuth();
 
     const [books, setBooks] = useState<LibraryBook[]>([]);
@@ -37,11 +35,6 @@ export default function MiBiblioteca() {
     const [filter, setFilter] = useState<ReadingStatus | "todos">("todos");
     const [showAdd, setShowAdd] = useState(false);
     const [reloadKey, setReloadKey] = useState(0);
-
-    // ── Redirect si no hay sesión ─────────────────────────────
-    useEffect(() => {
-        if (!initializing && !user) router.replace("/Login");
-    }, [initializing, user, router]);
 
     // ── Carga de la biblioteca ────────────────────────────────
     useEffect(() => {
@@ -90,7 +83,36 @@ export default function MiBiblioteca() {
         );
     }
 
-    if (!user) return null;
+    if (!user) return (
+        <div className="min-h-screen bg-[#fdfdfd] font-sans">
+            <div className="w-full mx-auto mt-8 px-4 sm:px-6 lg:px-8 box-border">
+                <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5 }}
+                    className="h-full flex items-center justify-center"
+                >
+                    <div className="bg-gradient-to-br from-[#f8f5ff] to-[#eedfff] rounded-3xl p-8 border border-purple-200/60 max-w-md text-center">
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#3d5bcf] to-[#c765dc] flex items-center justify-center text-white shadow-md mx-auto">
+                            <LogIn className="w-6 h-6" />
+                        </div>
+                        <p className="text-sm font-semibold text-gray-700 mb-1 mt-4">
+                            Inicia sesión para organizar tus lecturas favoritas
+                        </p>
+                        <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                            La biblioteca te permitirá guardar todos tus libros favoritos y experiencias
+                        </p>
+                        <a
+                            href="/Login"
+                            className="inline-block px-6 py-2.5 rounded-full text-white font-semibold text-sm bg-gradient-to-r from-[#3d5bcf] via-[#8553d1] to-[#c765dc] hover:opacity-90 transition-all mt-5"
+                        >
+                            Iniciar sesión
+                        </a>
+                    </div>
+                </motion.div>
+            </div>
+        </div>
+    );
 
     return (
         <div className="min-h-screen bg-[#fdfdfd] pb-20 font-sans">

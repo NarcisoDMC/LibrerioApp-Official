@@ -8,12 +8,13 @@ import BibliotecarioChat from "@/app/ui/Components/BibliotecarioChat";
 // ── Página del Bibliotecario IA ────────────────────────────────────────────
 // Hero compacto + área de chat que ocupa toda la altura disponible
 // (crece con la pantalla; el scroll vive dentro del chat, no en la página).
+// correccion: La altura del chat no debe de incrementar, aplicar overflow-y
 
 export default function Bibliotecario() {
     const { user } = useAuth();
 
     return (
-        <div className="min-h-dvh bg-[#fdfdfd] pb-4 sm:pb-6 flex flex-col font-sans">
+        <div className="min-h-dvh bg-[#fdfdfd] flex flex-col font-sans">
             {/* ── Hero compacto ─────────────────────────────────── */}
             <div className="w-full max-w-7xl mx-auto mt-4 sm:mt-6 px-4 sm:px-6 lg:px-8 box-border">
                 <motion.div
@@ -59,7 +60,12 @@ export default function Bibliotecario() {
                     {user ? (
                         <BibliotecarioChat />
                     ) : (
-                        <div className="h-full flex items-center justify-center">
+                        <motion.div 
+                            initial={{ opacity: 0, y: 18, scale: 0.99 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                            className="h-full flex items-center justify-center"
+                        >
                             <div className="bg-gradient-to-br from-[#f8f5ff] to-[#eedfff] rounded-3xl p-8 border border-purple-200/60 max-w-md text-center">
                                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#3d5bcf] to-[#c765dc] flex items-center justify-center text-white shadow-md mx-auto">
                                     <LogIn className="w-6 h-6" />
@@ -77,7 +83,7 @@ export default function Bibliotecario() {
                                     Iniciar sesión
                                 </a>
                             </div>
-                        </div>
+                        </motion.div>
                     )}
                 </div>
             </main>

@@ -20,32 +20,34 @@ export default function LibraryAddModal({
 
     const searchKey = query.trim();
 
-    // Ajuste de estado en render: nueva búsqueda → pendiente
+    // Ajuste de estado en render: nueva búsqueda → pendiente (solo con ≥3 chars)
     const [prevKey, setPrevKey] = useState("");
     if (prevKey !== searchKey) {
         setPrevKey(searchKey);
-        setSearching(searchKey !== "");
+        setSearching(searchKey.length >= 3);
         setError(null);
     }
 
     useEffect(() => {
-        if (!searchKey) return;
+        if (searchKey.length < 3) return;
 
         let cancelled = false;
-
-        apiGet<SearchResult>(`/api/books/search?q=${encodeURIComponent(searchKey)}&limit=8`)
-            .then((data) => {
-                if (!cancelled) setResults(data.data);
-            })
-            .catch((err: unknown) => {
-                if (!cancelled) setError(err instanceof Error ? err.message : "Error al buscar");
-            })
-            .finally(() => {
-                if (!cancelled) setSearching(false);
-            });
+        const timer = setTimeout(() => {
+            apiGet<SearchResult>(`/api/books/search?q=${encodeURIComponent(searchKey)}&limit=8`)
+                .then((data) => {
+                    if (!cancelled) setResults(data.data);
+                })
+                .catch((err: unknown) => {
+                    if (!cancelled) setError(err instanceof Error ? err.message : "Error al buscar");
+                })
+                .finally(() => {
+                    if (!cancelled) setSearching(false);
+                });
+        }, 300);
 
         return () => {
             cancelled = true;
+            clearTimeout(timer);
         };
     }, [searchKey]);
 
@@ -110,6 +112,10 @@ export default function LibraryAddModal({
                     ) : !searchKey ? (
                         <p className="text-center text-gray-400 text-xs py-10">
                             Escribe un título o autor para buscar en el catálogo.
+                        </p>
+                    ) : searchKey.length < 3 ? (
+                        <p className="text-center text-gray-400 text-xs py-10">
+                            Escribe al menos 3 caracteres para buscar.
                         </p>
                     ) : results.length === 0 ? (
                         <p className="text-center text-gray-400 text-xs py-10">

@@ -1,8 +1,17 @@
-// ── Cliente del API Express: fetch con Bearer y refresh automático ─────────
+// ── Cliente del API Express: fetch con Bearer, refresh automático y caché ──
 // Módulo isomórfico (sin "use client"): sirve en server components
 // (catálogo público) y en client components (sesión privada).
 
 import type { ApiErrorBody, AuthResponse } from "./types";
+import {
+    cacheGet,
+    cacheKey,
+    cacheSet,
+    clearCache,
+    inflightGet,
+    inflightSet,
+    routeTtlMs,
+} from "./http-cache";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -39,6 +48,8 @@ export function storeTokens(accessToken: string, refreshToken: string): void {
 export function clearTokens(): void {
     window.localStorage.removeItem(ACCESS_KEY);
     window.localStorage.removeItem(REFRESH_KEY);
+    // La sesión terminó: los datos por usuario cacheados dejan de ser válidos
+    clearCache();
 }
 
 // Refresh single-flight: varias peticiones 401 comparten el mismo intento
@@ -73,6 +84,7 @@ async function toApiError(res: Response): Promise<ApiError> {
     } catch {
         // respuestas sin JSON (p. ej. 204/502)
     }
+    
     return new ApiError(res.status, body?.error ?? `Error ${res.status}`, body?.details);
 }
 
@@ -80,7 +92,18 @@ interface ApiFetchOptions extends Omit<RequestInit, "body"> {
     body?: unknown;
 }
 
-export async function apiFetch<T>(
+// La invalidación es clave por prefijo de ruta afectado; en /api/auth cambia
+// la sesión entera y conviene vaciar todo.
+function invalidateCaches(path: string): void {
+    if (path.startsWith("/api/auth")) {
+        clearCache();
+    } else {
+        clearCache("/api/library");
+        clearCache("/api/community");
+    }
+}
+
+async function doFetch<T>(
     path: string,
     options: ApiFetchOptions = {},
     retried = false,
@@ -101,7 +124,7 @@ export async function apiFetch<T>(
     if (res.status === 401 && !retried && getRefreshToken() && !path.startsWith("/api/auth/")) {
         try {
             await refreshSession();
-            return apiFetch<T>(path, options, true);
+            return doFetch<T>(path, options, true);
         } catch {
             clearTokens();
             throw await toApiError(res);
@@ -117,6 +140,36 @@ export async function apiFetch<T>(
     }
 
     return (await res.json()) as T;
+}
+
+export async function apiFetch<T>(
+    path: string,
+    options: ApiFetchOptions = {},
+    retried = false,
+): Promise<T> {
+    const isGet = (options.method ?? "GET") === "GET";
+    const ttl = isGet ? routeTtlMs(path) : 0;
+
+    if (ttl > 0) {
+        const key = cacheKey(path, !!getAccessToken());
+        const cached = cacheGet<T>(key);
+        if (cached !== undefined) return cached;
+        const pending = inflightGet<T>(key);
+        if (pending) return pending;
+
+        const promise = doFetch<T>(path, options, retried).then((data) => {
+            cacheSet(key, data, ttl);
+            return data;
+        });
+        inflightSet(key, promise);
+        return promise;
+    }
+
+    const data = await doFetch<T>(path, options, retried);
+    if (!isGet) {
+        invalidateCaches(path);
+    }
+    return data;
 }
 
 export function apiGet<T>(path: string): Promise<T> {

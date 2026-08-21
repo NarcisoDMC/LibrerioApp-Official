@@ -68,7 +68,11 @@ function SearchPageContent() {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const q = input.trim();
-        if (q) router.push(`/busqueda?q=${encodeURIComponent(q)}`);
+        if (q.length < 3) {
+            setError("La búsqueda debe tener al menos 3 caracteres.");
+            return;
+        }
+        router.push(`/busqueda?q=${encodeURIComponent(q)}`);
     };
 
     return (

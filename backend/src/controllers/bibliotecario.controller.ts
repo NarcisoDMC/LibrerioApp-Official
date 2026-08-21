@@ -1,7 +1,11 @@
 import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import { getValid } from "../middleware/validate.js";
-import { bibliotecarioService, LIMITS } from "../services/bibliotecario.service.js";
+import {
+    bibliotecarioService,
+    type ChatStreamEvent,
+    LIMITS,
+} from "../services/bibliotecario.service.js";
 import { ApiError } from "../utils/api-error.js";
 
 // ── Schemas zod: toda entrada se valida aquí, nunca se lee req.body directo ─
@@ -49,6 +53,74 @@ function requireUserId(req: Request): string {
     return id;
 }
 
+// ── Streaming SSE ───────────────────────────────────────────────────────────
+
+// Serializa un evento como `data: {json}\n\n` y fuerza el flush para que el
+// cliente lo reciba al instante (sin esperar al cierre del buffer de Node)
+function sendSse(res: Response, event: ChatStreamEvent): void {
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+    // compression añade flush(); si no existe, Node entrega por trozos igual
+    (res as Response & { flush?: () => void }).flush?.();
+}
+
+// Monta una respuesta SSE. El setup (validaciones, BD, fase de tools) corre
+// ANTES de enviar headers: si falla, next(err) responde el JSON de siempre.
+// Solo los fallos a mitad de stream se convierten en un evento `error`.
+async function handleStream(
+    setup: () => Promise<{ stream: AsyncIterable<ChatStreamEvent> }>,
+    res: Response,
+    next: NextFunction,
+): Promise<void> {
+    let stream: AsyncIterable<ChatStreamEvent>;
+    try {
+        ({ stream } = await setup());
+    } catch (e) {
+        next(e);
+        return;
+    }
+
+    // headers SSE: stream plano, sin caché ni buffering intermedio
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    try {
+        for await (const event of stream) {
+            sendSse(res, event);
+        }
+    } catch {
+        // abort del cliente o caída del proveedor a mitad de stream
+        try {
+            sendSse(res, {
+                type: "error",
+                message: "La respuesta se interrumpió, intenta de nuevo",
+            });
+        } catch {
+            // cliente ya desconectado: no se puede escribir
+        }
+    } finally {
+        try {
+            res.end();
+        } catch {
+            // socket ya cerrado
+        }
+    }
+}
+
+// AbortController ligado a la desconexión del cliente: aborta la generación
+// de DeepSeek en curso (el backend no sigue gastando cupo ni tokens). El
+// listener se retira cuando la respuesta termina (evitar fugas).
+function abortOnClientClose(req: Request, res: Response): AbortSignal {
+    const ac = new AbortController();
+    const onClose = () => ac.abort();
+    req.on("close", onClose);
+    res.on("finish", () => req.off("close", onClose));
+    return ac.signal;
+}
+
+// ── Streaming: los 3 endpoints SSE + controladores JSON ────────────────────
+
 export const bibliotecarioController = {
     startChat(req: Request, res: Response, next: NextFunction): void {
         const { content } = getValid<z.infer<typeof chatCreateSchema>>(res, "validBody");
@@ -72,6 +144,48 @@ export const bibliotecarioController = {
         } = getValid<z.infer<typeof chatMessageParamsSchema>>(res, "validParams");
         void handle(
             () => bibliotecarioService.regenerate(requireUserId(req), chatId, messageId),
+            res,
+            next,
+        );
+    },
+
+    // ── Versiones streaming (SSE) ───────────────────────────────────────
+
+    startChatStream(req: Request, res: Response, next: NextFunction): void {
+        const { content } = getValid<z.infer<typeof chatCreateSchema>>(res, "validBody");
+        const signal = abortOnClientClose(req, res);
+        void handleStream(
+            () => bibliotecarioService.startChatStream(requireUserId(req), content, signal),
+            res,
+            next,
+        );
+    },
+
+    sendMessageStream(req: Request, res: Response, next: NextFunction): void {
+        const { chatId } = getValid<z.infer<typeof chatIdParamsSchema>>(res, "validParams");
+        const { content } = getValid<z.infer<typeof chatCreateSchema>>(res, "validBody");
+        const signal = abortOnClientClose(req, res);
+        void handleStream(
+            () => bibliotecarioService.sendMessageStream(requireUserId(req), chatId, content, signal),
+            res,
+            next,
+        );
+    },
+
+    regenerateStream(req: Request, res: Response, next: NextFunction): void {
+        const {
+            chatId,
+            messageId,
+        } = getValid<z.infer<typeof chatMessageParamsSchema>>(res, "validParams");
+        const signal = abortOnClientClose(req, res);
+        void handleStream(
+            () =>
+                bibliotecarioService.regenerateStream(
+                    requireUserId(req),
+                    chatId,
+                    messageId,
+                    signal,
+                ),
             res,
             next,
         );

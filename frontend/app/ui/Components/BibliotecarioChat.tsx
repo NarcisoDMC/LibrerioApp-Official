@@ -2,9 +2,24 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Bot, Loader2, MessagesSquare, Send } from "lucide-react";
-import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api-client";
-import type { ChatDetail, ChatReply, ChatStoredMessage, ChatSummary } from "@/lib/types";
+import { Bot, MessagesSquare, Send, Square } from "lucide-react";
+import {
+    API_URL,
+    ApiError,
+    clearTokens,
+    getAccessToken,
+    getRefreshToken,
+    refreshSession,
+    apiDelete,
+    apiGet,
+    apiPatch,
+} from "@/lib/api-client";
+import type {
+    ChatDetail,
+    ChatStoredMessage,
+    ChatStreamEvent,
+    ChatSummary,
+} from "@/lib/types";
 import ChatConversationList from "./ChatConversationList";
 import ChatMessageBubble from "./ChatMessageBubble";
 
@@ -17,6 +32,7 @@ const SUGGESTIONS = [
     "¿Qué leo después de…? Ayúdame a decidir",
     "Los mejores libros de ciencia ficción",
     "Dónde comprar o pedir prestado un libro",
+    "Consulta dudas de algun libro que este leyendo",
 ];
 
 function toErrorMessage(err: unknown): string {
@@ -29,12 +45,111 @@ function toErrorMessage(err: unknown): string {
     return "No se pudo contactar con el asistente";
 }
 
+// ── Streaming SSE: fetch crudo (apiPost no puede leer chunks) ───────────────
+// Bearer manual desde localStorage; en 401 refresca la sesión una vez y
+// reintenta. Resuelve con el evento done/blocked; lanza con el mensaje del
+// evento error o con AbortError si el usuario cancela (signal.aborted).
+async function streamRequest(
+    path: string,
+    body: unknown,
+    onChunk: (delta: string) => void,
+    signal: AbortSignal,
+    retried = false,
+): Promise<Extract<ChatStreamEvent, { type: "done" | "blocked" }>> {
+    let res: Response;
+    try {
+        res = await fetch(`${API_URL}${path}`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
+            },
+            body: JSON.stringify(body),
+            signal,
+        });
+    } catch (err) {
+        if (signal.aborted) throw err; // cancelación del usuario, no un fallo
+        throw new ApiError(502, "No se pudo contactar con el asistente");
+    }
+
+    // Access caducado: refrescar una sola vez y reintentar el stream entero
+    if (res.status === 401 && !retried && getRefreshToken()) {
+        try {
+            await refreshSession();
+            return streamRequest(path, body, onChunk, signal, true);
+        } catch {
+            clearTokens();
+            throw new ApiError(401, "Sesión expirada, vuelve a iniciar sesión");
+        }
+    }
+
+    if (!res.ok) {
+        let message = `Error ${res.status}`;
+        try {
+            message = ((await res.json()) as { error?: string }).error ?? message;
+        } catch {
+            // respuesta sin JSON (p. ej. 502 del proxy)
+        }
+        throw new ApiError(res.status, message);
+    }
+    if (!res.body) throw new ApiError(502, "El asistente no respondió");
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            // GOTCHA UTF-8: sin { stream: true }, palabras con acento partidas
+            buffer += decoder.decode(value, { stream: true });
+            const events = buffer.split("\n\n"); // separador de eventos SSE
+            buffer = events.pop() ?? "";
+
+            for (const rawEvent of events) {
+                for (const line of rawEvent.split("\n")) {
+                    if (!line.startsWith("data:")) continue;
+                    const payload = line.slice(5).trim();
+                    if (!payload) continue;
+
+                    let event: ChatStreamEvent;
+                    try {
+                        event = JSON.parse(payload) as ChatStreamEvent;
+                    } catch {
+                        continue; // evento corrupto: se ignora
+                    }
+
+                    if (event.type === "chunk") {
+                        onChunk(event.delta);
+                    } else if (event.type === "done" || event.type === "blocked") {
+                        return event;
+                    } else if (event.type === "error") {
+                        throw new ApiError(502, event.message);
+                    }
+                }
+            }
+        }
+    } finally {
+        try {
+            await reader.cancel();
+        } catch {
+            // lector ya cerrado
+        }
+    }
+    throw new ApiError(502, "La respuesta se interrumpió, intenta de nuevo");
+}
+
 export default function BibliotecarioChat() {
     const [chats, setChats] = useState<ChatSummary[]>([]);
     const [activeChatId, setActiveChatId] = useState<string | null>(null);
     const [messages, setMessages] = useState<ChatStoredMessage[]>([]);
     const [input, setInput] = useState("");
-    const [loading, setLoading] = useState(false);
+    // Estado del stream: texto acumulado + AbortController para cancelar
+    const [streaming, setStreaming] = useState(false);
+    const [streamingText, setStreamingText] = useState("");
+    const streamingTextRef = useRef(""); // espejo mutable (onChunk → setState)
+    const streamingAbortRef = useRef<AbortController | null>(null);
     const [loadingChats, setLoadingChats] = useState(true);
     const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -48,7 +163,7 @@ export default function BibliotecarioChat() {
 
     useEffect(() => {
         scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-    }, [messages, loading]);
+    }, [messages, streaming, streamingText]);
 
     // Carga inicial: limpia el almacenamiento local antiguo (la fuente de
     // verdad ahora es el servidor) y abre la conversación más reciente
@@ -91,27 +206,88 @@ export default function BibliotecarioChat() {
         setDrawerOpen(false);
     }
 
+    // ── Helpers de streaming (burbuja optimista + consumo SSE) ──────────
+
+    // Burbuja del asistente mientras llegan los chunks (id local, sin acciones)
+    function appendStreamingBubble(aborted: boolean): void {
+        setMessages((prev) => [
+            ...prev,
+            {
+                id: `local-interrupted-${Date.now()}`,
+                seq: Number.MAX_SAFE_INTEGER,
+                role: "assistant",
+                content: streamingTextRef.current || (aborted ? "Respuesta interrumpida" : ""),
+                createdAt: new Date().toISOString(),
+            },
+        ]);
+    }
+
+    function startStream(): AbortController {
+        streamingTextRef.current = "";
+        setStreamingText("");
+        setStreaming(true);
+        setError(null);
+        const ac = new AbortController();
+        streamingAbortRef.current = ac;
+        return ac;
+    }
+
+    function stopStream(): void {
+        setStreaming(false);
+        setStreamingText("");
+        streamingTextRef.current = "";
+        streamingAbortRef.current = null;
+    }
+
     // Primer mensaje de una conversación: crea el chat y muestra la respuesta
     async function createChatAndAsk(content: string): Promise<void> {
-        setLoading(true);
-        setError(null);
+        const ac = startStream();
+
+        // optimista: el mensaje del usuario aparece al instante
+        setMessages([
+            {
+                id: `local-${Date.now()}`,
+                seq: Number.MAX_SAFE_INTEGER,
+                role: "user",
+                content,
+                createdAt: new Date().toISOString(),
+            },
+        ]);
+
         try {
-            const reply = await apiPost<ChatReply>("/api/bibliotecario/chats", { content });
+            const done = await streamRequest(
+                "/api/bibliotecario/chats/stream",
+                { content },
+                (delta) => {
+                    streamingTextRef.current += delta;
+                    setStreamingText(streamingTextRef.current);
+                },
+                ac.signal,
+            );
+
+            // el done trae el chatId real: refrescar lista y detalle
             const list = await apiGet<ChatSummary[]>("/api/bibliotecario/chats");
             setChats(list);
-            const detail = await apiGet<ChatDetail>(`/api/bibliotecario/chats/${reply.chatId}`);
-            setActiveChatId(reply.chatId);
+            setActiveChatId(done.chatId);
+            const detail = await apiGet<ChatDetail>(`/api/bibliotecario/chats/${done.chatId}`);
             setMessages(detail.messages);
         } catch (err) {
-            setError(toErrorMessage(err));
+            if (ac.signal.aborted) {
+                // abort: el texto parcial queda como burbuja efímera sin acciones
+                appendStreamingBubble(true);
+            } else {
+                setMessages([]);
+                setActiveChatId(null);
+                setError(toErrorMessage(err));
+            }
         } finally {
-            setLoading(false);
+            stopStream();
         }
     }
 
     async function send(text: string): Promise<void> {
         const content = text.trim();
-        if (!content || loading) return;
+        if (!content || streaming) return;
 
         if (!activeChatId) {
             await createChatAndAsk(content);
@@ -120,8 +296,7 @@ export default function BibliotecarioChat() {
         }
 
         setInput("");
-        setError(null);
-        setLoading(true);
+        const ac = startStream();
 
         // optimista: el mensaje del usuario aparece al instante y se reemplaza
         // por los reales de la BD al responder el modelo
@@ -138,7 +313,15 @@ export default function BibliotecarioChat() {
         ]);
 
         try {
-            await apiPost<ChatReply>(`/api/bibliotecario/chats/${activeChatId}/messages`, { content });
+            await streamRequest(
+                `/api/bibliotecario/chats/${activeChatId}/messages/stream`,
+                { content },
+                (delta) => {
+                    streamingTextRef.current += delta;
+                    setStreamingText(streamingTextRef.current);
+                },
+                ac.signal,
+            );
             const detail = await apiGet<ChatDetail>(`/api/bibliotecario/chats/${activeChatId}`);
             setMessages(detail.messages);
             // el chat activo vuelve arriba en el listado
@@ -149,28 +332,55 @@ export default function BibliotecarioChat() {
                     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
             );
         } catch (err) {
-            setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-            setError(toErrorMessage(err));
+            if (ac.signal.aborted) {
+                // abort: el mensaje user ya está en BD; el texto parcial queda
+                // como burbuja efímera sin acciones
+                appendStreamingBubble(true);
+            } else {
+                setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+                setError(toErrorMessage(err));
+            }
         } finally {
-            setLoading(false);
+            stopStream();
         }
     }
 
     async function regenerate(messageId: string): Promise<void> {
-        if (!activeChatId || regeneratingId) return;
+        if (!activeChatId || regeneratingId || streaming) return;
         setRegeneratingId(messageId);
-        setError(null);
+        const ac = startStream();
+
         try {
-            await apiPost<ChatReply>(
-                `/api/bibliotecario/chats/${activeChatId}/messages/${messageId}/regenerate`,
+            await streamRequest(
+                `/api/bibliotecario/chats/${activeChatId}/messages/${messageId}/regenerate/stream`,
+                {},
+                (delta) => {
+                    streamingTextRef.current += delta;
+                    setStreamingText(streamingTextRef.current);
+                },
+                ac.signal,
             );
             // el backend reemplaza y trunca: se recarga el chat para ser exactos
             const detail = await apiGet<ChatDetail>(`/api/bibliotecario/chats/${activeChatId}`);
             setMessages(detail.messages);
         } catch (err) {
-            setError(toErrorMessage(err));
+            if (ac.signal.aborted) {
+                appendStreamingBubble(true);
+            } else {
+                setError(toErrorMessage(err));
+                // el mensaje original ya fue truncado por el backend: refrescar
+                try {
+                    const detail = await apiGet<ChatDetail>(
+                        `/api/bibliotecario/chats/${activeChatId}`,
+                    );
+                    setMessages(detail.messages);
+                } catch {
+                    // el refresco falló también: se queda el error visible
+                }
+            }
         } finally {
             setRegeneratingId(null);
+            stopStream();
         }
     }
 
@@ -215,10 +425,10 @@ export default function BibliotecarioChat() {
     const activeChat = chats.find((c) => c.id === activeChatId) ?? null;
 
     return (
-        <div className="flex flex-col lg:flex-row flex-1 min-h-0 gap-4 lg:gap-5">
+        <div className="flex flex-col lg:flex-row flex-1 min-h-0 max-h-full gap-4 lg:gap-5">
             {/* ── Sidebar de conversaciones (desktop) ─────────────── */}
             <div className="hidden lg:flex w-64 xl:w-72 shrink-0 min-h-0">
-                <div className="flex-1 min-h-0 bg-white rounded-3xl border border-purple-100 shadow-xl overflow-hidden">
+                <div className="flex-1 min-h-0 bg-white rounded-3xl border border-purple-100 shadow-xl overflow-y-scroll">
                     <ChatConversationList
                         chats={chats}
                         activeChatId={activeChatId}
@@ -265,7 +475,7 @@ export default function BibliotecarioChat() {
             </AnimatePresence>
 
             {/* ── Panel del chat ───────────────────────────────────── */}
-            <div className="flex-1 min-w-0 flex flex-col bg-white rounded-3xl border border-purple-100 shadow-xl overflow-hidden">
+            <div className="flex-1 min-w-0 max-sm:py-5 flex flex-col bg-white rounded-3xl border border-purple-100 shadow-xl overflow-y-scroll">
                 {/* Header del chat */}
                 <div className="px-4 sm:px-6 py-3.5 bg-gradient-to-r from-purple-50/80 via-white to-purple-50/50 border-b border-purple-100 flex items-center gap-3">
                     <button
@@ -308,7 +518,7 @@ export default function BibliotecarioChat() {
                                         key={suggestion}
                                         type="button"
                                         onClick={() => void send(suggestion)}
-                                        disabled={loading}
+                                        disabled={streaming}
                                         className="px-4 py-2 rounded-full bg-white border border-purple-200 text-xs font-medium text-[#8553d1] hover:bg-[#f6efff] hover:border-[#8553d1] transition-all cursor-pointer disabled:opacity-40"
                                     >
                                         {suggestion}
@@ -328,18 +538,21 @@ export default function BibliotecarioChat() {
                         ))
                     )}
 
-                    {loading && (
-                        <div className="flex gap-3 justify-start">
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#3d5bcf] to-[#8553d1] flex items-center justify-center text-white flex-shrink-0 shadow-md">
-                                <Bot className="w-4 h-4" />
-                            </div>
-                            <div className="bg-white border border-purple-100 rounded-3xl rounded-bl-md px-5 py-4 shadow-sm flex items-center gap-1.5">
-                                <Loader2 size={16} className="animate-spin text-[#8553d1]" />
-                                <span className="text-xs font-medium text-gray-400">
-                                    Consultando el catálogo…
-                                </span>
-                            </div>
-                        </div>
+                    {/* Burbuja del asistente mientras streamea (cursor pulsante) */}
+                    {streaming && (
+                        <ChatMessageBubble
+                            message={{
+                                id: "local-streaming",
+                                seq: Number.MAX_SAFE_INTEGER,
+                                role: "assistant",
+                                content: streamingText,
+                                createdAt: new Date().toISOString(),
+                            }}
+                            streaming
+                            regenerating={false}
+                            onRegenerate={() => undefined}
+                            onDelete={() => undefined}
+                        />
                     )}
                 </div>
 
@@ -353,8 +566,11 @@ export default function BibliotecarioChat() {
                 )}
 
                 {/* Input */}
-                <div className="p-4 bg-white border-t border-purple-100">
-                    <div className="flex items-center gap-2 bg-purple-50/60 p-1.5 rounded-full border border-purple-200/80">
+{/* Anillo con gradiente: invisible en reposo; al enfocar se dibuja de
+                    izquierda a derecha y al salir se retira de derecha a
+                    izquierda (ver .chat-input-ring en globals.css) */}
+                <div className="chat-input-ring rounded-full p-[2px]">
+                    <div className="relative rounded-full bg-white p-1.5 flex items-center gap-2">
                         <input
                             type="text"
                             value={input}
@@ -371,14 +587,21 @@ export default function BibliotecarioChat() {
                                     ? "Escribe tu duda o consulta de libros..."
                                     : "Empieza una nueva conversación..."
                             }
-                            disabled={loading}
+                            disabled={streaming}
                             className="flex-1 bg-transparent px-4 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none border-none font-sans disabled:opacity-60"
                         />
                         <button
                             type="button"
-                            onClick={() => void send(input)}
-                            disabled={loading || !input.trim()}
-                            aria-label="Enviar mensaje"
+                            onClick={() => {
+                                // mientras streamea el botón aborta la respuesta
+                                if (streaming) {
+                                    streamingAbortRef.current?.abort();
+                                } else {
+                                    void send(input);
+                                }
+                            }}
+                            disabled={streaming ? false : !input.trim()}
+                            aria-label={streaming ? "Detener respuesta" : "Enviar mensaje"}
                             className="
                                 w-10 h-10 rounded-full
                                 bg-gradient-to-r from-[#3d5bcf] via-[#8553d1] to-[#c765dc]
@@ -386,7 +609,7 @@ export default function BibliotecarioChat() {
                                 shadow-md disabled:opacity-40 transition-all hover:opacity-90 cursor-pointer
                             "
                         >
-                            {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                            {streaming ? <Square size={16} /> : <Send size={16} />}
                         </button>
                     </div>
                 </div>

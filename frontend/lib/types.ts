@@ -141,3 +141,10 @@ export interface ChatReply {
     respuesta: string;
     enlaces?: ChatLink[];
 }
+
+// Eventos del streaming SSE del chat (cada uno viaja como `data: {json}\n\n`)
+export type ChatStreamEvent =
+    | { type: "chunk"; delta: string }
+    | { type: "done"; chatId: string; messageId: string; enlaces?: ChatLink[] }
+    | { type: "blocked"; chatId: string; message: string }
+    | { type: "error"; message: string };

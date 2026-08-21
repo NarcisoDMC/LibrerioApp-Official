@@ -2,7 +2,8 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { BookOpen, Star } from "lucide-react";
+import { BookOpen, Check, Star } from "lucide-react";
+import { useLibrary } from "@/lib/use-library-books";
 
 export interface Book {
     id: string | number;
@@ -14,6 +15,7 @@ export interface Book {
 
 export default function BookCard({ book, loading }: { book: Book | null; loading: boolean }) {
     const [imageError, setImageError] = useState(false);
+    const { olids, loading: loadingLibrary } = useLibrary();
     const [prevBookId, setPrevBookId] = useState<Book["id"] | null>(book?.id ?? null);
 
     if (prevBookId !== (book?.id ?? null)) {
@@ -46,6 +48,8 @@ export default function BookCard({ book, loading }: { book: Book | null; loading
             </div>
         );
     }
+
+    const inLibrary = !loadingLibrary && olids.has(String(book.id));
 
     /* ── MODO NORMAL ────────────────────────────────────────── */
     return (
@@ -89,6 +93,14 @@ export default function BookCard({ book, loading }: { book: Book | null; loading
                             {book.author}
                         </p>
                     </div>
+
+                    {/* Indicar si el libro está en la biblioteca */}
+                    {inLibrary && (
+                        <span className="inline-flex items-center gap-1.5 w-fit px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
+                            <Check size={12} />
+                            En tu biblioteca
+                        </span>
+                    )}
 
                     {/* Calificación */}
                     <div className="flex items-center gap-1.5 pt-2 border-t border-gray-100">

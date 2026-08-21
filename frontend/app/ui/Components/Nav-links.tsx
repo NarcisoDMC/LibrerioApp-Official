@@ -14,7 +14,7 @@ const NavLinks = [
     { name: "Comunidad", href: "/Comunidad", icon: UsersRound },
 ];
 
-export default function NavLinksComponent({ layoutId = "activeTabBackground" }: { layoutId?: string }) {
+export default function NavLinksComponent() {
     const pathname = usePathname();
 
     return (
@@ -43,9 +43,9 @@ export default function NavLinksComponent({ layoutId = "activeTabBackground" }: 
                         
                         {isActive && (
                             <motion.div
-                                layoutId={layoutId}
                                 className="absolute px-18 max-[900px]:px-16 max-md:px-[42px] py-6 max-md:pt-9 max-md:pb-10 bg-gradient-to-r from-slate-200/50 to-white/80 rounded-b-3xl max-md:rounded-t-3xl max-md:rounded-b-none z-0 shadow-[0_4px_8px_rgba(0,0,0,0.15)] border border-[#e8dbfc]"
-                                initial={false}
+                                initial={{ opacity: 0, scale: 0.8, y: 20 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
                                 transition={{ type: "spring", stiffness: 400, damping: 30 }}
                             />
                         )}

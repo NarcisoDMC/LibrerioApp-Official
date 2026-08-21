@@ -18,3 +18,36 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ── Anillo del input del Bibliotecario: sin borde visible en reposo; al
+    enfocar se dibuja de izquierda a derecha (clip-path) y al salir se
+    retira de derecha a izquierda, con el gradiente fluyendo ── */
+.chat-input-ring {
+  position: relative;
+}
+
+.chat-input-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #3d5bcf, #8553d1, #c765dc, #8553d1, #3d5bcf);
+  background-size: 200% 100%;
+  clip-path: inset(0 100% 0 0); /* oculto: el padding del anillo no se borra */
+  transition: clip-path 0.45s ease, box-shadow 0.45s ease;
+}
+
+.chat-input-ring:focus-within::before {
+  clip-path: inset(0 0 0 0); /* entrada: se dibuja de izquierda a derecha */
+  box-shadow: 0 0 14px rgba(133, 83, 209, 0.35);
+  animation: librerio-ring-flow 3s linear infinite;
+}
+
+@keyframes librerio-ring-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}

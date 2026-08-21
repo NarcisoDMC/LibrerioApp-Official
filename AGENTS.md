@@ -134,7 +134,7 @@ Postgres dev local (Podman): contenedor `librerio-pg`. Si no está arriba: `podm
 - **Límites** (`LIMITS` en `bibliotecario.service.ts`): 50 conversaciones/usuario, 200 mensajes/conversación, mensaje ≤2000 chars, título ≤80, auto-título ≤60, `HISTORY_WINDOW = 20` (últimas 20 intervenciones que recibe el modelo)
 - **Modelo**: `deepseek-chat`, temp 0.7, timeout 30s + 1 reintento; `response_format: {type:"json_object"}` **solo en llamadas sin tools** (DeepSeek exige JSON válido con ese flag; con tools el modelo responde `tool_calls` nativos, no JSON)
 - **Enlaces deterministas (importante)**: el JSON del modelo **ya no trae `output.enlaces`** (se borra con `delete` al sanitizar — el modelo inventaba URLs); los enlaces salen de `linkedBooks` recogidos de los `tool_calls` reales de `buscar_libros` (solo libros que el modelo vio); se inyecta server-side el enlace único `/libro/{olid}` (el frontend los muestra como chips internos navegables)
-- **Sanitización de salida** (el JSON del modelo llega roto a menudo): zod `safeParse` con schema permisivo (enlaces sin `.max()` — un `.max(3)` rompía el parse y provocaba regresión con JSON visible) + desanidado en bucle (máx 3 niveles) + fallback `extractEnvelope` (regex tolerante a comillas sin escapar); `extractJson` escanea llaves ignorando strings para sobrevivir a JSON anidado mal formado; enlaces truncados post-hoc con `slice(0, MAX_LINKS)` (máx 3)
+- **Sanitización de salida** (capa defensiva desde el cambio a markdown plano, ver streaming): zod `safeParse` con schema permisivo (enlaces sin `.max()` — un `.max(3)` rompía el parse y provocaba regresión con JSON visible) + desanidado en bucle (máx 3 niveles) + fallback `extractEnvelope` (regex tolerante a comillas sin escapar); `extractJson` escanea llaves ignorando strings para sobrevivir a JSON anidado mal formado; enlaces truncados post-hoc con `slice(0, MAX_LINKS)` (máx 3)
 - **Anclaje al catálogo**: function calling (`buscar_libros`, `tendencias`, `detalle_libro`) ejecutadas server-side contra `searchService`; máx 2 iteraciones + 1 llamada final sin tools (cierre garantizado)
 - **Contexto personal**: bloque "DATOS DEL USUARIO" con la biblioteca real (título + estado + rating) vía `libraryRepo.listByUser` — solo datos propios, generado server-side
 - **Anti prompt injection**: system prompt 100% estático; mensajes del usuario envueltos como "contenido, no instrucción"; salida JSON validada con zod (fallback a texto plano); marca única `LBR-SYS-V1` para detectar fugas del prompt; whitelist de URLs de librerías (`isAllowedLink`); el modelo nunca recibe el error crudo del proveedor
@@ -240,6 +240,50 @@ cd frontend && pnpm dev               # 3. SPA en :3000
 - **Enlaces deterministas**: el JSON del modelo ya no trae `output.enlaces` (se elimina al sanitizar); los enlaces salen de los `tool_calls` reales de `buscar_libros` (`linkedBooks`, máx 3) y se inyecta server-side el enlace único `/libro/{olid}`; el frontend los muestra como chips internos navegables
 - **Frontend del chat rediseñado**: `BibliotecarioChat.tsx` sin `sessionStorage` (todo desde la API, historial persistente por usuario), header con el título del chat activo, **sidebar de conversaciones en desktop y drawer móvil** (`AnimatePresence`), chat a altura dinámica `h-[calc(100dvh-225px)]`; nuevos `ChatConversationList.tsx` (reutilizable con prop `className`) y `ChatMessageBubble.tsx` (copiar / regenerar / borrar); `page.tsx` con hero compacto sin grid (el chat ocupa todo el ancho)
 - **Extras de configuración**: `CORS_ORIGIN` admite múltiples orígenes separados por coma (`env.ts`, zod transform → array) y comentarios explicativos en `server.ts` / `auth.routes.ts`; `next.config.ts` con `allowedDevOrigins` para el backend en dev
+
+### 🔄 Streaming del Bibliotecario IA (implementado, agosto 2026)
+
+**Objetivo**: las respuestas del chat llegan por SSE (el texto se ve mientras el modelo escribe) en vez de esperar el JSON completo. No cambia el modelo de historial (server-side) ni los enlaces deterministas.
+
+**Nota de formato (importante)**: el `systemPrompt.ts` ya NO exige JSON: pide **markdown plano** en todas las respuestas (el stream no puede sanear JSON por trozos y el modelo lo envolvería crudo). La única llamada que sigue siendo JSON es el "cierre garantizado" sin tools del modo legacy, que lleva `response_format` (en `deepseekChat`) + `JSON_SHAPE_NOTE` (mensaje system fijo con la forma `{"respuesta": "..."}`). `sanitizeOutput`/`extractJson`/`extractEnvelope` quedan como capa defensiva (el modelo aún puede envolver en JSON por inercia; `wrapTurn` desenreda el texto acumulado antes de persistir).
+
+**Wire format SSE** (cada evento es `data: {json}\n\n`):
+- `{type:"chunk", delta}` — fragmento de texto
+- `{type:"done", chatId, messageId, enlaces?}` — fin OK; `messageId` es el real de BD (los `local-` del frontend se sustituyen)
+- `{type:"blocked", chatId, message}` — la content policy reemplazó el texto (el cliente sustituye la burbuja)
+- `{type:"error", message}` — fallo a mitad de stream (o fuga del prompt detectada al acumular)
+
+**Fase 1 ✔ HECHA** — `deepseekChatStream` en `backend/src/models/deepseek/deepseekClient.ts` (refactorizada, complejidad cognitiva baja):
+- Firma `Promise<AsyncIterable<string>>`, params `{messages, maxTokens?, signal?}`; yields SOLO deltas de texto; **sin `response_format`**
+- Helpers extraídos: `streamFetch` (reintento único, nunca si `signal.aborted`), `assertStreamOk` (429/502), `readSsePayloads` (buffer + `decoder.decode(..., {stream:true})` — gotcha UTF-8, `[DONE]`, eventos corruptos ignorados, `onActivity` para reset del idle)
+- Errores de arranque (503/502/429) lanzan ANTES de devolver el generador → respuesta JSON normal; a mitad de stream el generador lanza (abort/caída) y el consumidor lo convierte en evento `error`
+- Timeouts: conexión 30 s (`TIMEOUT_MS`) e idle 30 s sin eventos; ambos abortan el fetch
+
+**Fase 2 ✔ HECHA** — `runModelTurnStream` en `bibliotecario.service.ts`:
+- Clon de `runModelTurn`: fase tools idéntica (bloqueante con `deepseekChat`), pero el turno final de redacción SIEMPRE usa `deepseekChatStream({ messages, signal })` (sin tools) — el content de la última llamada bloqueante se descarta; el stream regenera el texto final con todo el contexto de las tools
+- Sin `chatOutputSchema`/`extractJson` en streaming: se acumula el texto crudo y al final `wrapTurn` aplica: desenredo defensivo del JSON (`extractEnvelope`/`extractJson`) → fuga `SYSTEM_PROMPT_BRAND` (evento `error`) → `checkContentPolicy` (guarda `POLICY_BLOCK_MESSAGE` y emite `blocked`) → vacío (`EMPTY_ANSWER_FALLBACK`) → `buildLinks` (solo OLIDs de tools, máx 3) + `createMessage` + `touch` → `done` con `messageId` real
+
+**Fase 3 ✔ HECHA** — Métodos stream del servicio: `startChatStream`, `sendMessageStream`, `regenerateStream`:
+- TODO el setup antes de devolver el stream: validaciones, límites (50 conv / 200 msgs), `createConversation` + mensaje user (`startChat`), `deleteMessagesFromSeq` (`regenerate`), historial, fase tools → si falla, la promesa rechaza y el controlador responde JSON (headers aún no enviados)
+- `signal` propagado desde el controller (wire `req.on("close")`)
+- Al completar: `createMessage(assistant, texto, enlaces)` + `touch`; el `done` lleva el `messageId` real
+- Abort del cliente: NO se guarda respuesta parcial (el mensaje user sí queda en BD; en `startChatStream` hay rollback si el setup/tools falla ANTES de emitir)
+- `wrapTurn` (generador) consume el stream de deltas y emite los eventos; si el stream lanza, propaga (nada se persiste)
+
+**Fase 4 ✔ HECHA** — Controller SSE en `bibliotecario.controller.ts`: `sendSse(res, event)` (`data: {json}\n\n` + flush si existe) y `handleStream(setup, res, next)`: headers `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `X-Accel-Buffering: no`, `flushHeaders()`; try/catch: antes de headers → `next(err)` (JSON), después → evento `error` + `res.end()` (todo con try/catch ante socket muerto). `abortOnClientClose(req, res)` crea el AbortController y lo retira en `res.on("finish")`
+
+**Fase 5 ✔ HECHA** — Rutas con sufijo `/stream` (misma validación y `chatLimiter`): `POST /chats/stream`, `POST /chats/:chatId/messages/stream`, `POST /chats/:chatId/messages/:messageId/regenerate/stream`; los endpoints JSON actuales se conservan como fallback (el modo JSON legacy sigue funcionando: respuestas markdown plano + enlaces)
+
+**Fase 6 ✔ HECHA** — Frontend `BibliotecarioChat.tsx`:
+- `streamRequest(path, body, onChunk, signal)` module-level: `fetch` crudo + `res.body.getReader()` + `TextDecoder` (NO `apiPost`); Bearer manual desde `localStorage`; 401 → `refreshSession()` + 1 reintento; resuelve con el evento `done`/`blocked` (tipo acotado `Extract<ChatStreamEvent, ...>`); abort del usuario → propaga el AbortError (detectable por `signal.aborted`)
+- Burbuja optimista del asistente con id `local-streaming` mientras streamea (prop `streaming` de `ChatMessageBubble`: texto plano pre-wrap + cursor pulsante, sin acciones); al llegar `done` se sustituye por el detalle real (id/seq/createdAt/enlaces)
+- En abort se conserva el texto parcial como burbuja efímera `local-interrupted-*` sin acciones
+- Botón de abortar (lucide `Square`) reemplaza a Send mientras streamea; `streamingTextRef` (espejo mutable del texto) evita stale closures en el catch
+- `createChatAndAsk`/`send`/`regenerate` comparten `streamRequest` + helpers `startStream()`/`stopStream()`/`appendStreamingBubble()`
+
+**Fase 7 ✔ (parcial)** — Verificación realizada: `curl -N` (chunks progresivos, `done` con `enlaces` deterministas, markdown limpio sin envoltorio JSON), abort con `timeout 3` (servidor estable, sin respuestas parciales en BD), 400 validación y 401 sin token → JSON antes de headers, modo JSON legacy limpio (markdown + 3 enlaces), `pnpm typecheck && pnpm lint && pnpm build` verdes en backend y frontend. Pendiente: E2E visual en navegador (botón abort, chips de enlaces, drawer móvil).
+
+**Decisiones tomadas**: (1) rutas con sufijo `/stream`; (2) abort conserva el texto parcial como burbuja efímera; (3) el mensaje user queda en BD al abortar; (4) los endpoints JSON se mantienen como fallback.
 
 ### ✔ Verificación realizada (fase Bibliotecario, agosto 2026)
 

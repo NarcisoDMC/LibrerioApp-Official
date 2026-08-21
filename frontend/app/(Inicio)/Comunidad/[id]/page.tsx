@@ -75,9 +75,9 @@ export default function PostDetailPage() {
                 <p className="text-gray-500 text-sm">{error ?? "Post no encontrado"}</p>
                 <Link
                     href="/Comunidad"
-                    className="inline-flex items-center gap-2 text-[#8553d1] text-sm font-medium hover:text-[#4a348c] transition-colors"
+                    className="group inline-flex items-center gap-2 text-violet-700 text-sm font-medium hover:text-purple-500 transition-colors"
                 >
-                    <ArrowLeft size={16} />
+                    <ArrowLeft size={16} className="transition group-hover:-translate-x-1"/>
                     Volver a la comunidad
                 </Link>
             </div>
@@ -90,9 +90,9 @@ export default function PostDetailPage() {
                 {/* ── Volver ─────────────────────────────────────── */}
                 <Link
                     href="/Comunidad"
-                    className="inline-flex items-center gap-2 text-[#8553d1] text-sm font-medium hover:text-[#4a348c] transition-colors mb-6"
+                    className="group inline-flex items-center gap-2 text-violet-700 text-sm font-medium hover:text-purple-500 transition-colors mb-6"
                 >
-                    <ArrowLeft size={16} />
+                    <ArrowLeft size={16} className="transition group-hover:-translate-x-1" />
                     Volver a la comunidad
                 </Link>
 

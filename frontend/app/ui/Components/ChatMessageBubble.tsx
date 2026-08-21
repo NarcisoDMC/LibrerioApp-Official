@@ -15,9 +15,16 @@ type Props = {
     regenerating: boolean;
     onRegenerate: (messageId: string) => void;
     onDelete: (messageId: string) => void;
+    streaming?: boolean;
 };
 
-export default function ChatMessageBubble({ message, regenerating, onRegenerate, onDelete }: Props) {
+export default function ChatMessageBubble({
+    message,
+    regenerating,
+    onRegenerate,
+    onDelete,
+    streaming = false,
+}: Props) {
     const [copied, setCopied] = useState(false);
 
     const isAssistant = message.role === "assistant";
@@ -49,7 +56,25 @@ export default function ChatMessageBubble({ message, regenerating, onRegenerate,
             >
                 {isAssistant ? (
                     <>
-                        <MarkdownContent content={message.content} />
+                        {streaming ? (
+                            // Sin contenido aún: icono de carga + "Generando..."
+                            // (el modelo aún no emite el primer chunk)
+                            message.content.trim().length === 0 ? (
+                                <p className="flex items-center gap-2 text-gray-400">
+                                    <Loader2 size={14} className="animate-spin text-[#8553d1]" />
+                                    Generando...
+                                </p>
+                            ) : (
+                                // Ya fluye el texto: plano (re-parsear markdown por
+                                // cada delta es caro) con cursor pulsante al final
+                                <p className="whitespace-pre-wrap">
+                                    {message.content}
+                                    <span className="inline-block w-0.5 h-4 bg-[#8553d1] animate-pulse ml-0.5 align-middle" />
+                                </p>
+                            )
+                        ) : (
+                            <MarkdownContent content={message.content} />
+                        )}
                         {message.enlaces && message.enlaces.length > 0 && (
                             <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-purple-100">
                                 {message.enlaces.map((link) =>
@@ -86,8 +111,8 @@ export default function ChatMessageBubble({ message, regenerating, onRegenerate,
                 )}
             </div>
 
-            {/* Acciones al hover: copiar / regenerar / eliminar */}
-            {message.content.trim().length > 0 && (
+            {/* Acciones al hover: copiar / regenerar / eliminar (ocultas mientras streamea) */}
+            {!streaming && message.content.trim().length > 0 && (
                 <div className="hidden group-hover:flex items-center gap-0.5 self-center opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                         type="button"

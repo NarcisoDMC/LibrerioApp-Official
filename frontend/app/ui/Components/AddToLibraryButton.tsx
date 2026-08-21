@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import { BookOpen, Check, Loader2, Plus } from "lucide-react";
 import { apiPost } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { useLibrary } from "@/lib/use-library-books";
 import type { LibraryBook } from "@/lib/types";
 
 export default function AddToLibraryButton({ olid }: { olid: string }) {
     const router = useRouter();
     const { user, initializing } = useAuth();
+    const { olids, loading: libraryLoading, refresh } = useLibrary(); // obtenemos los libros que tenga el usuario en su libreria
 
     const [loading, setLoading] = useState(false);
     const [added, setAdded] = useState(false);
@@ -33,9 +35,11 @@ export default function AddToLibraryButton({ olid }: { olid: string }) {
         try {
             await apiPost<LibraryBook>("/api/library", { olid });
             setAdded(true);
+            refresh();
         } catch (err) {
             if (err instanceof Error && err.message.includes("Ya tienes este libro")) {
                 setAdded(true);
+                refresh();
             } else {
                 setError(err instanceof Error ? err.message : "No se pudo añadir el libro");
             }
@@ -43,6 +47,8 @@ export default function AddToLibraryButton({ olid }: { olid: string }) {
             setLoading(false);
         }
     };
+
+    const alreadyInLibrary = !libraryLoading && olids.has(olid);
 
     if (initializing || loading) {
         return (
@@ -57,7 +63,7 @@ export default function AddToLibraryButton({ olid }: { olid: string }) {
         );
     }
 
-    if (added) {
+    if (added || alreadyInLibrary) {
         return (
             <span className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-semibold text-sm">
                 <Check size={16} />
@@ -75,6 +81,7 @@ export default function AddToLibraryButton({ olid }: { olid: string }) {
             >
                 {user ? <Plus size={16} /> : <BookOpen size={16} />}
                 {user ? "Añadir a Mi Biblioteca" : "Inicia sesión para añadirlo"}
+                
             </button>
             {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
         </div>
