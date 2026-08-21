@@ -3,6 +3,14 @@
 import "dotenv/config"; //Carga y maneja automaticamente las variables de entorno declaradas en nuestro .env
 import { z } from "zod"; //Es una biblioteca de declaracion y validacion de esquemas 
 
+// ── Diagnóstico temporal para Vercel ──
+const requiredVars = ["OL_CONTACT_EMAIL", "DATABASE_URL", "JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"];
+const missing = requiredVars.filter((k) => !process.env[k]);
+if (missing.length > 0) {
+    console.error("[env] MISSING VARS:", missing.join(", "));
+    console.error("[env] Available keys:", Object.keys(process.env).filter((k) => !k.startsWith("VERCEL_")).join(", "));
+}
+
 // declaramos un esquema de entrada para las variables de entornos
 const envSchema = z.object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
