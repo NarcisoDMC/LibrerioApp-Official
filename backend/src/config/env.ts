@@ -1,6 +1,8 @@
 //Configuramos el manejo de variables de entorno de la aplicacion
 
-import "dotenv/config"; //Carga y maneja automaticamente las variables de entorno declaradas en nuestro .env
+if (process.env.VERCEL !== "1") {
+    await import("dotenv/config");
+}
 import { z } from "zod"; //Es una biblioteca de declaracion y validacion de esquemas 
 
 // declaramos un esquema de entrada para las variables de entornos
