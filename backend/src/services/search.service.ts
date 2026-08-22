@@ -97,8 +97,15 @@ export const searchService = {
     },
 
     async byOlid(olid: string): Promise<BookDetail> {
-        const raw = await olFetch<OLWorkJson>(`/works/${olid}.json`);
-        const detail = mapWorkDetail(raw);
+        const suffix = olid.slice(-1);
+        if (suffix === "W") {
+            const raw = await olFetch<OLWorkJson>(`/works/${olid}.json`);
+            const detail = mapWorkDetail(raw);
+            const authorNames = await resolveAuthorNames(detail.authors);
+            return { ...detail, authors: authorNames, author: authorNames[0] ?? "Autor desconocido" };
+        }
+        const raw = await olFetch<OLEditionJson>(`/books/${olid}.json`);
+        const detail = mapEditionDetail(raw);
         const authorNames = await resolveAuthorNames(detail.authors);
         return { ...detail, authors: authorNames, author: authorNames[0] ?? "Autor desconocido" };
     },

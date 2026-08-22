@@ -23,7 +23,7 @@ export const categoryQuerySchema = z.object({
 });
 
 export const olidParamsSchema = z.object({
-    olid: z.string().regex(/^OL\d+W$/, "OLID de obra inválido"),
+    olid: z.string().regex(/^OL\d+[A-Z]$/, "OLID inválido"),
 });
 
 export const authorOlidParamsSchema = z.object({
