@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookOpen, CalendarDays, Star } from "lucide-react";
+import { BookOpen, CalendarDays } from "lucide-react";
 import { apiGet } from "@/lib/api-client";
 import type { BookDetail } from "@/lib/types";
-import AddToLibraryButton from "@/app/ui/Components/AddToLibraryButton";
-import BackButton from "@/app/ui/Components/BackButton";
-import MarkdownContent from "@/app/ui/Components/MarkdownContent";
+import AddToLibraryButton from "@/app/ui/Components/libro/AddToLibraryButton";
+import BackButton from "@/app/ui/Components/libro/BackButton";
+import MarkdownContent from "@/app/ui/Components/shared/MarkdownContent";
+import AskToAIChatButton from "@/app/ui/Components/libro/AskToAIChatButton";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,6 @@ export default async function LibroPage({
                             )}
                             {book.isbn && (
                                 <span className="inline-flex items-center gap-1.5">
-                                    <Star size={15} className="text-amber-400 fill-amber-400" />
                                     ISBN {book.isbn}
                                 </span>
                             )}
@@ -85,6 +85,8 @@ export default async function LibroPage({
                                 <MarkdownContent content={book.description} />
                             </div>
                         )}
+
+                        <AskToAIChatButton olid={book.id} title={book.title} />
 
                         {book.subjects.length > 0 && (
                             <div className="mb-8">
