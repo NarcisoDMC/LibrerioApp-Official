@@ -6,9 +6,9 @@ import Navbar from "@/app/ui/Login/Navbar";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
 import { playfairdisplay } from "@/app/fonts";
-import { Star, BookOpen, User, Mail, Lock, Loader2 } from "lucide-react";
+import { Star, BookOpen, User, Mail, Loader2, Eye, EyeClosed } from "lucide-react";
 import { useRouter } from "next/navigation";
-import TypeWriter from "@/app/ui/Components/TypeWriter";
+import TypeWriter from "@/app/ui/Components/shared/TypeWriter";
 import { STARS } from "@/app/(Auth)/stars";
 import { useAuth } from "@/lib/auth-context";
 
@@ -19,6 +19,7 @@ export default function RegistroPage() {
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
@@ -162,22 +163,24 @@ export default function RegistroPage() {
                                         >
                                             Nombre de Usuario
                                         </label>
-                                        <div className="relative">
-                                            <input
-                                                type="text"
-                                                id="registro-username"
-                                                required
-                                                minLength={2}
-                                                maxLength={50}
-                                                value={name}
-                                                onChange={(e) => setName(e.target.value)}
-                                                autoComplete="name"
-                                                className="w-full bg-fuchsia-200/60 rounded-full py-2.5 pl-4 pr-10 text-sm text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-violet-400 focus:bg-white transition-all duration-300"
-                                            />
-                                            <User
-                                                size={16}
-                                                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-fuchsia-500"
-                                            />
+                                        <div className="input-ring rounded-full p-[2px]">
+                                            <div className="relative rounded-full">
+                                                <input
+                                                    type="text"
+                                                    id="registro-username"
+                                                    required
+                                                    minLength={2}
+                                                    maxLength={50}
+                                                    value={name}
+                                                    onChange={(e) => setName(e.target.value)}
+                                                    autoComplete="name"
+                                                    className="w-full bg-fuchsia-100 rounded-full py-2.5 pl-4 pr-10 text-sm text-gray-700 placeholder-transparent focus:outline-none focus:bg-white transition-all duration-300"
+                                                />
+                                                <User
+                                                    size={16}
+                                                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-fuchsia-500"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 
@@ -189,20 +192,22 @@ export default function RegistroPage() {
                                         >
                                             Correo Electrónico
                                         </label>
-                                        <div className="relative">
-                                            <input
-                                                type="email"
-                                                id="registro-email"
-                                                required
-                                                value={email}
-                                                onChange={(e) => setEmail(e.target.value)}
-                                                autoComplete="email"
-                                                className="w-full bg-fuchsia-200/60 rounded-full py-2.5 pl-4 pr-10 text-sm text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-violet-400 focus:bg-white transition-all duration-300"
-                                            />
-                                            <Mail
-                                                size={16}
-                                                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-fuchsia-500"
-                                            />
+                                        <div className="input-ring rounded-full p-[2px]">
+                                            <div className="relative rounded-full">
+                                                <input
+                                                    type="email"
+                                                    id="registro-email"
+                                                    required
+                                                    value={email}
+                                                    onChange={(e) => setEmail(e.target.value)}
+                                                    autoComplete="email"
+                                                    className="w-full bg-fuchsia-100 rounded-full py-2.5 pl-4 pr-10 text-sm text-gray-700 placeholder-transparent focus:outline-none focus:bg-white transition-all duration-300"
+                                                />
+                                                <Mail
+                                                    size={16}
+                                                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-fuchsia-500"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 
@@ -214,21 +219,38 @@ export default function RegistroPage() {
                                         >
                                             Contraseña
                                         </label>
-                                        <div className="relative">
-                                            <input
-                                                type="password"
-                                                id="registro-password"
-                                                required
-                                                minLength={8}
-                                                value={password}
-                                                onChange={(e) => setPassword(e.target.value)}
-                                                autoComplete="new-password"
-                                                className="w-full bg-fuchsia-200/60 rounded-full py-2.5 pl-4 pr-10 text-sm text-gray-700 placeholder-transparent focus:outline-none focus:ring-2 focus:ring-violet-400 focus:bg-white transition-all duration-300"
-                                            />
-                                            <Lock
-                                                size={16}
-                                                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-fuchsia-500"
-                                            />
+                                        <div className="input-ring rounded-full p-[2px]">
+                                            <div className="relative rounded-full">
+                                                <input
+                                                    type={showPassword ? "text" : "password"}
+                                                    id="registro-password"
+                                                    required
+                                                    minLength={8}
+                                                    value={password}
+                                                    onChange={(e) => setPassword(e.target.value)}
+                                                    autoComplete="new-password"
+                                                    className="w-full bg-fuchsia-100 rounded-full py-2.5 pl-4 pr-10 text-sm text-gray-700 placeholder-transparent focus:outline-none focus:bg-white transition-all duration-300"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowPassword((prev) => !prev)}
+                                                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                                                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-fuchsia-500"
+                                                >
+                                                    <AnimatePresence mode="wait" initial={false}>
+                                                        <motion.span
+                                                            key={showPassword ? 'show' : 'hide'}
+                                                            initial={{ opacity: 0, scale: 0.6, rotate: -20 }}
+                                                            animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                                                            exit={{ opacity: 0, scale: 0.6, rotate: 20 }}
+                                                            transition={{ duration: 0.15, ease: 'easeInOut' }}
+                                                            style={{ display: 'inline-flex' }}
+                                                        >
+                                                            {showPassword ? <EyeClosed size={16} /> : <Eye size={16} />}
+                                                        </motion.span>
+                                                    </AnimatePresence>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
 

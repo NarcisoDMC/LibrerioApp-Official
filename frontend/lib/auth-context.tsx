@@ -31,16 +31,21 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const REFRESH_PROACTIVE_MS = 14 * 60 * 1000;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<SafeUser | null>(null);
     const [initializing, setInitializing] = useState(true);
-
     // Hidratación inicial: me → refresh → anónimo
     useEffect(() => {
         let cancelled = false;
 
         async function hydrate(): Promise<void> {
-            if (getAccessToken()) {
+            const stored = localStorage.getItem("librerio.lastRefresh");
+            const lastRefresh = stored ? Number(stored) : 0;
+            const elapsed = Date.now() - lastRefresh;
+
+            if (getAccessToken() && elapsed < 14 * 60 * 1000) {
                 try {
                     // Si el access expiró, apiFetch refresca solo y reintenta
                     const me = await apiFetch<SafeUser>("/api/auth/me");
@@ -72,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const applySession = useCallback((session: AuthResponse) => {
         storeTokens(session.accessToken, session.refreshToken);
         setUser(session.user);
+        localStorage.setItem("librerio.lastRefresh", String(Date.now()));
     }, []);
 
     const login = useCallback(
@@ -84,6 +90,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
         [applySession],
     );
+
+    useEffect(() => {
+        if (!user) return;
+
+        const timer = setTimeout(async () => {
+            try {
+                const session = await refreshSession();
+                storeTokens(session.accessToken, session.refreshToken);
+                localStorage.setItem("librerio.lastRefresh", String(Date.now()));
+                setUser(session.user);
+            } catch (error) {
+                console.debug("Refresh proactivo fallo:", error);
+            }
+        }, REFRESH_PROACTIVE_MS);
+
+        return () => clearTimeout(timer);
+    }, [user]);
 
     const register = useCallback(
         async (input: { name: string; email: string; password: string }) => {

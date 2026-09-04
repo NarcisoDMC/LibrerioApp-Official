@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { BookOpen, Check, Copy, ExternalLink, Loader2, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import type { ChatStoredMessage } from "@/lib/types";
-import MarkdownContent from "./MarkdownContent";
+import MarkdownContent from "../shared/MarkdownContent";
 
 // ── Burbuja individual del chat del Bibliotecario IA ────────────────────────
 // Texto markdown + chips de ficha (rutas internas de la app) + acciones al
@@ -40,7 +40,7 @@ export default function ChatMessageBubble({
     };
 
     return (
-        <div className={`flex gap-3 group ${isAssistant ? "justify-start" : "justify-end"}`}>
+        <div className={`flex flex-wrap gap-2 sm:gap-3 group ${isAssistant ? "justify-start" : "justify-end"}`}>
             {isAssistant && (
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#3d5bcf] to-[#8553d1] flex items-center justify-center text-white flex-shrink-0 shadow-md">
                     <Sparkles className="w-4 h-4" />
@@ -48,7 +48,7 @@ export default function ChatMessageBubble({
             )}
 
             <div
-                className={`max-w-[85%] px-4 py-3 rounded-3xl text-sm leading-relaxed ${
+                className={`max-w-[85%] break-words px-3 sm:px-4 py-2.5 sm:py-3 rounded-3xl text-sm leading-relaxed ${
                     isAssistant
                         ? "bg-white border border-purple-100 text-gray-700 rounded-bl-md shadow-sm"
                         : "bg-gradient-to-r from-[#3d5bcf] via-[#8553d1] to-[#c765dc] text-white rounded-br-md"
@@ -113,7 +113,7 @@ export default function ChatMessageBubble({
 
             {/* Acciones al hover: copiar / regenerar / eliminar (ocultas mientras streamea) */}
             {!streaming && message.content.trim().length > 0 && (
-                <div className="hidden group-hover:flex items-center gap-0.5 self-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex w-full justify-end items-center gap-0.5 self-center opacity-100 sm:w-auto sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                     <button
                         type="button"
                         onClick={() => void copy()}

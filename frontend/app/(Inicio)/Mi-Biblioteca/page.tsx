@@ -7,8 +7,8 @@ import { motion } from "motion/react";
 import { apiDelete, apiGet, apiPatch } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import type { LibraryBook, ReadingStatus } from "@/lib/types";
-import LibraryAddModal from "@/app/ui/Components/LibraryAddModal";
-import StarRating from "@/app/ui/Components/StarRating";
+import LibraryAddModal from "@/app/ui/Components/Mi-Biblioteca/LibraryAddModal";
+import StarRating from "@/app/ui/Components/Mi-Biblioteca/StarRating";
 
 const STATUSES: { key: ReadingStatus; label: string }[] = [
     { key: "por-leer", label: "Por leer" },

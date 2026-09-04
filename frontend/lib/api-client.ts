@@ -69,6 +69,7 @@ export function refreshSession(): Promise<AuthResponse> {
             if (!res.ok) throw await toApiError(res);
             const data = (await res.json()) as AuthResponse;
             storeTokens(data.accessToken, data.refreshToken);
+            localStorage.setItem("librerio.lastRefresh", String(Date.now()));
             return data;
         })
         .finally(() => {
@@ -121,14 +122,29 @@ async function doFetch<T>(
     });
 
     // Token caducado: intentamos refrescar una sola vez y reintentamos
-    if (res.status === 401 && !retried && getRefreshToken() && !path.startsWith("/api/auth/")) {
-        try {
-            await refreshSession();
-            return doFetch<T>(path, options, true);
-        } catch {
-            clearTokens();
-            throw await toApiError(res);
+    // && !path.startsWith("/api/auth/") lo eliminamos porque impide refrescar la session cuando el access token expira
+    if (res.status === 401 && !retried && getRefreshToken() && path !== "/api/auth/refresh") {
+
+        let refreshed = false;
+        for (let attempt = 0; attempt < 2; attempt++){
+            try {
+                await refreshSession();
+                refreshed = true;
+                break;
+            } catch {
+                if (attempt === 0){
+                    await new Promise(r => setTimeout(r, 1000)); //agregamos un timeout de 1s antes de hacer el primer intento
+                }
+            }
         }
+
+        // Solo si el refresh salió, reintentar la petición original
+        if (refreshed) {
+            return doFetch<T>(path, options, true); 
+        }
+
+        clearTokens();
+        throw await toApiError(res);
     }
 
     if (!res.ok) {

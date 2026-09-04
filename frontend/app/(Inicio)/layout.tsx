@@ -1,4 +1,4 @@
-import Navbar from "@/app/ui/Components/Navbar";
+import Navbar from "@/app/ui/Components/navigation/Navbar";
 import "swiper/css";
 
 export default function HomeLayout({ children }: { children: React.ReactNode }) {

@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { Search, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
-import BookCard, { type Book } from "@/app/ui/Components/BookCard";
+import BookCard, { type Book } from "@/app/ui/Components/home/BookCard";
 import { apiGet } from "@/lib/api-client";
 import type { SearchResult } from "@/lib/types";
 

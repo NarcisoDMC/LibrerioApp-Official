@@ -3,8 +3,8 @@
 import Link from "next/link"
 import Image from "next/image"
 import NavLinks from "./Nav-links"
-import { Search, User, LogOut, Loader2 } from "lucide-react"
-import NavBottom from "@/app/ui/Components/NavBottom"
+import { Search, User, LogOut, LogIn, Loader2 } from "lucide-react"
+import NavBottom from "./NavBottom"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
@@ -35,7 +35,7 @@ export default function Navbar() {
                 rounded-bl-[20px] rounded-br-[20px]
                 relative z-10
                 max-sm:px-4 max-sm:py-2 max-sm:gap-3
-            ">
+                ">
 
                     {/* ── Logo clickeable ──────────────────────────── */}
                     <Link href="/" className="flex-shrink-0 cursor-pointer">
@@ -160,7 +160,7 @@ export default function Navbar() {
                                 active:bg-[#f1e6f9] active:scale-[0.98]
                                 "
                             >
-                                <LogOut size={25} />
+                                <User size={25} />
                             </button>
                         ) : (
                             <button
@@ -178,7 +178,7 @@ export default function Navbar() {
                             >
 
                                 <Link href="/Login">
-                                    <User size={25} />
+                                    <LogIn size={25} />
                                 </Link>
                             </button>
                         )}

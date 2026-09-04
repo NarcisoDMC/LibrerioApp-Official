@@ -3,7 +3,7 @@
 import { motion } from "motion/react";
 import { BookOpen, LogIn, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import BibliotecarioChat from "@/app/ui/Components/BibliotecarioChat";
+import BibliotecarioChat from "@/app/ui/Components/bibliotecario/BibliotecarioChat";
 
 // ── Página del Bibliotecario IA ────────────────────────────────────────────
 // Hero compacto + área de chat que ocupa toda la altura disponible
@@ -16,7 +16,7 @@ export default function Bibliotecario() {
     return (
         <div className="min-h-dvh bg-[#fdfdfd] flex flex-col font-sans">
             {/* ── Hero compacto ─────────────────────────────────── */}
-            <div className="w-full max-w-7xl mx-auto mt-4 sm:mt-6 px-4 sm:px-6 lg:px-8 box-border">
+            <div className="w-full max-w-7xl mx-auto mt-3 sm:mt-6 px-4 sm:px-6 lg:px-8 box-border">
                 <motion.div
                     initial={{ opacity: 0, y: 18, scale: 0.99 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -24,7 +24,7 @@ export default function Bibliotecario() {
                     className="
                         relative overflow-hidden rounded-[1.75rem]
                         bg-gradient-to-r from-[#3d5bcf] via-[#8553d1] to-[#c765dc]
-                        px-5 sm:px-8 py-4 sm:py-5 text-white
+                        px-4 sm:px-8 py-3.5 sm:py-5 text-white
                         shadow-[0_14px_35px_-12px_rgba(133,83,209,0.35)]
                     "
                 >
@@ -46,7 +46,7 @@ export default function Bibliotecario() {
                             ">
                                 Bibliotecario Virtual
                             </h1>
-                            <p className="mt-0.5 text-white/85 text-xs sm:text-sm leading-relaxed m-0">
+                            <p className="hidden min-[380px]:block mt-0.5 text-white/85 text-xs sm:text-sm leading-relaxed m-0">
                                 Recomendaciones, autores, sagas y dónde conseguir tus lecturas, con el conocimiento de tu biblioteca.
                             </p>
                         </div>
@@ -55,8 +55,8 @@ export default function Bibliotecario() {
             </div>
 
             {/* ── Área principal: chat a altura completa ─────────── */}
-            <main className="flex-1 min-h-0 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 mt-4 sm:mt-6 box-border">
-                <div className="h-[calc(100dvh-225px)] min-h-[430px]">
+            <main className="flex-1 min-h-0 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 mt-3 sm:mt-6 pb-20 md:pb-0 box-border">
+                <div className="h-[calc(100dvh-260px)] min-h-[280px] sm:h-[calc(100dvh-225px)] sm:min-h-[430px]">
                     {user ? (
                         <BibliotecarioChat />
                     ) : (

@@ -22,12 +22,14 @@ const SECTIONS: Section[] = [
 export default function BookSections() {
     const [booksBySection, setBooksBySection] = useState<Record<string, Book[]>>(() => {
         const initial: Record<string, Book[]> = {};
+
         for (const section of SECTIONS){
             const cached = sectionCache.get(section.key);
             if (cached) initial[section.key] = cached;
         }
         return initial
     });
+
     const [loading, setLoading] = useState(() => SECTIONS.some((s) => !sectionCache.has(s.key)));
 
     useEffect(() => {

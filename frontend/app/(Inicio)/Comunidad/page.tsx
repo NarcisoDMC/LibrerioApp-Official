@@ -6,8 +6,8 @@ import { motion } from "motion/react";
 import { apiGet } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import type { PostListResult, PostView } from "@/lib/types";
-import PostCard from "@/app/ui/Components/PostCard";
-import CreatePostModal from "@/app/ui/Components/CreatePostModal";
+import PostCard from "@/app/ui/Components/comunidad/PostCard";
+import CreatePostModal from "@/app/ui/Components/comunidad/CreatePostModal";
 
 const PAGE_SIZE = 10;
 

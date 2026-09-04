@@ -7,8 +7,8 @@ import { ArrowLeft, Loader2, MessageCircle, Send, BookOpen } from "lucide-react"
 import { apiGet, apiPost } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import type { PostDetail } from "@/lib/types";
-import { formatDate } from "@/app/ui/Components/PostCard";
-import PostLikeButton from "@/app/ui/Components/PostLikeButton";
+import { formatDate } from "@/app/ui/Components/comunidad/PostCard";
+import PostLikeButton from "@/app/ui/Components/comunidad/PostLikeButton";
 
 export default function PostDetailPage() {
     const params = useParams<{ id: string }>();

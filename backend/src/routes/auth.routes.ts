@@ -19,8 +19,7 @@ authRouter.post(
     authController.register,
 );
 
-//Permite hacer peticiones post 
-
+//Permite hacer peticiones post para validar usario con login, refresh y logout
 authRouter.post("/login", authLimiter, validateBody(loginBodySchema), authController.login);
 authRouter.post("/refresh", validateBody(refreshBodySchema), authController.refresh);
 authRouter.post("/logout", validateBody(refreshBodySchema), authController.logout);

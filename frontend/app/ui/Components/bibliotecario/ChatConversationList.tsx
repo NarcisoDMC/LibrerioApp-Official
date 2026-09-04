@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Loader2, MessageSquarePlus, Pencil, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, Loader2, MessageSquarePlus, Pencil, Trash2, X } from "lucide-react";
 import type { ChatSummary } from "@/lib/types";
 
 // ── Sidebar de conversaciones del Bibliotecario IA ──────────────────────────
 // Lista de chats (más reciente primero), crear, renombrar en línea y borrar
-// con confirmación en dos pasos (evita borrados accidentales).
+// con modal de confirmación responsivo (evita borrados accidentales).
 
 type Props = {
     chats: ChatSummary[];
@@ -47,7 +47,8 @@ export default function ChatConversationList({
 }: Props) {
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState("");
-    const [confirmingId, setConfirmingId] = useState<string | null>(null);
+    const [deletingChat, setDeletingChat] = useState<ChatSummary | null>(null);
+    const [deleting, setDeleting] = useState(false);
 
     const startRename = (chat: ChatSummary) => {
         setRenamingId(chat.id);
@@ -65,13 +66,17 @@ export default function ChatConversationList({
         }
     };
 
-    const handleDelete = async (chatId: string) => {
-        if (confirmingId !== chatId) {
-            setConfirmingId(chatId);
-            return;
+    const confirmDelete = async () => {
+        if (!deletingChat) return;
+        setDeleting(true);
+        try {
+            await onDelete(deletingChat.id);
+        } catch {
+            // el error se muestra en el contenedor
+        } finally {
+            setDeleting(false);
+            setDeletingChat(null);
         }
-        setConfirmingId(null);
-        await onDelete(chatId);
     };
 
     return (
@@ -103,7 +108,6 @@ export default function ChatConversationList({
                 {chats.map((chat) => {
                     const isActive = chat.id === activeChatId;
                     const isRenaming = renamingId === chat.id;
-                    const isConfirming = confirmingId === chat.id;
 
                     if (isRenaming) {
                         return (
@@ -161,47 +165,95 @@ export default function ChatConversationList({
                                 </p>
                             </div>
 
-                            {isConfirming ? (
+                            <div className="flex items-center gap-0.5">
                                 <button
                                     type="button"
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        void handleDelete(chat.id);
+                                        startRename(chat);
                                     }}
-                                    className="text-red-500 font-bold text-[10px] px-1.5 py-0.5 rounded bg-red-50 border border-red-200 cursor-pointer"
+                                    aria-label="Renombrar"
+                                    className="p-1 rounded-md text-gray-400 hover:text-[#8553d1] hover:bg-purple-100 cursor-pointer"
                                 >
-                                    ¿Borrar?
+                                    <Pencil size={12} />
                                 </button>
-                            ) : (
-                                <div className="hidden group-hover:flex items-center gap-0.5">
-                                    <button
-                                        type="button"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            startRename(chat);
-                                        }}
-                                        aria-label="Renombrar"
-                                        className="p-1 rounded-md text-gray-400 hover:text-[#8553d1] hover:bg-purple-100 cursor-pointer"
-                                    >
-                                        <Pencil size={12} />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            void handleDelete(chat.id);
-                                        }}
-                                        aria-label="Eliminar conversación"
-                                        className="p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 cursor-pointer"
-                                    >
-                                        <Trash2 size={12} />
-                                    </button>
-                                </div>
-                            )}
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDeletingChat(chat);
+                                    }}
+                                    aria-label="Eliminar conversación"
+                                    className="p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 cursor-pointer"
+                                >
+                                    <Trash2 size={12} />
+                                </button>
+                            </div>
                         </div>
                     );
                 })}
             </div>
+
+            {/* ── Modal de confirmación de borrado ──────────────────── */}
+            {deletingChat && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
+                    onClick={() => !deleting && setDeletingChat(null)}
+                >
+                    <div
+                        className="w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Icono de advertencia */}
+                        <div className="flex justify-center pt-6 pb-2">
+                            <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
+                                <AlertTriangle size={28} className="text-red-500" />
+                            </div>
+                        </div>
+
+                        {/* Contenido */}
+                        <div className="px-6 pb-2 text-center">
+                            <h3 className="text-base font-bold text-gray-800">
+                                Eliminar conversación
+                            </h3>
+                            <p className="mt-2 text-sm text-gray-500 leading-relaxed">
+                                ¿Seguro que quieres eliminar{" "}
+                                <span className="font-semibold text-gray-700">
+                                    &ldquo;{deletingChat.title}&rdquo;
+                                </span>
+                                ? Esta acción no se puede deshacer y se perderán todos los mensajes.
+                            </p>
+                        </div>
+
+                        {/* Botones */}
+                        <div className="flex gap-3 px-6 py-5">
+                            <button
+                                type="button"
+                                onClick={() => setDeletingChat(null)}
+                                disabled={deleting}
+                                className="flex-1 py-2.5 rounded-full border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors cursor-pointer"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void confirmDelete()}
+                                disabled={deleting}
+                                className="flex-1 py-2.5 rounded-full bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-50 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                                {deleting ? (
+                                    <>
+                                        <Loader2 size={14} className="animate-spin" />
+                                        Eliminando…
+                                    </>
+                                ) : (
+                                    "Eliminar"
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </aside>
     );
 }

@@ -3,8 +3,8 @@
 import { motion } from "motion/react";
 import { BookOpen, Sparkles, Star } from "lucide-react";
 import { playfairdisplay } from "@/app/fonts";
-import TypeWriter from "@/app/ui/Components/TypeWriter";
-import BookSections from "@/app/ui/Components/BookSections";
+import TypeWriter from "@/app/ui/Components/shared/TypeWriter";
+import BookSections from "@/app/ui/Components/home/BookSections";
 import Image from "next/image";
 import GirlReading from "@/public/Librerio/bannerAsset-reading.png";
 
