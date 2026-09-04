@@ -359,6 +359,10 @@ pnpm dev                      # :3000
 - Pooler IPv4 en port 6543 (necesario para Vercel, que no soporta IPv6)
 - Migraciones: `pnpm db:migrate` o ejecutar los SQL en el dashboard
 
+### Enlace de Vercel
+
+https://librerio-app.vercel.app
+
 ---
 
 ## Scripts útiles
